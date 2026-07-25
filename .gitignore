@@ -1,0 +1,34 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# ไฟล์ดีไซน์ต้นฉบับ / สคริปต์ช่วย deploy (ไม่ต้องขึ้น repo)
+/ClaudeDesign/
+*.zip
+*.bat
