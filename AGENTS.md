@@ -51,6 +51,9 @@ app/
 ├── page.tsx                🏠 หน้าแรก
 ├── not-found.tsx           404 ภาษาไทย
 ├── opengraph-image.tsx     รูป OG 1200×630 (โหลดฟอนต์ไทยจาก Google Fonts, มี fallback)
+├── icon.svg                favicon แบบเวกเตอร์ (brand mark: กรอบขาวมน + ไอคอน DB แดงอิฐ)
+├── favicon.ico             favicon 6 ขนาด (16/32/48/64/128/256) ปรับความหนาเส้นแยกรายขนาด
+├── apple-icon.png          180×180 สำหรับ iOS (full-bleed ไม่มีพื้นโปร่ง)
 ├── robots.ts               เปิดทาง search engine + AI crawler
 ├── sitemap.ts
 ├── feed.xml/route.ts       RSS
@@ -145,6 +148,16 @@ ln -s <MOUNT>/node_modules node_modules && npx tsc --noEmit
 
 **G. รูปที่ยังไม่มีไฟล์** ใช้ `<AssetImage>` เสมอ — ตรวจ `fs.existsSync` ให้ ถ้าไม่มีไฟล์จะขึ้น
 placeholder แทนที่จะเป็นรูปแตก (เป็น server component ห้ามเรียกจาก client component)
+
+**H. โค้ดที่แตะ `node:fs` ห้ามหลุดเข้า client bundle** — `import type` ถูกลบทิ้งตอน compile จึงปลอดภัย
+แต่ *value import* ไม่ปลอดภัย ถ้า client component เผลอ import ฟังก์ชันจากไฟล์ที่มี `fs`
+Turbopack จะพังด้วย `the chunking context does not support external modules (request: node:fs)`
+⚠️ `tsc` จับบั๊กนี้ไม่ได้ ต้องรัน `next build` ถึงจะเจอ
+⇒ ฟังก์ชันบริสุทธิ์ไว้ `lib/format.ts` · type ไว้ `lib/types.ts` · งานที่ใช้ fs ไว้ `lib/content.ts`
+
+**I. Favicon** สร้างจากสคริปต์ PIL (ดู `docs/CHANGELOG.md`) ไม่ได้ใช้ `next/og`
+เพราะ `next/og` ทำ worker ตาย SIGBUS ในแซนด์บ็อกซ์ จึงตรวจสอบไม่ได้
+ถ้าจะแก้ไอคอน ให้แก้ `app/icon.svg` แล้ว re-render ไฟล์ `.ico`/`.png` ให้ตรงกัน
 
 ## Design source of truth
 
