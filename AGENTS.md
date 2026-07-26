@@ -17,7 +17,8 @@
 - ชื่อ-นามสกุล, ชื่อเล่น "อาจารย์ตี๋", ระดับ OCP, ประสบการณ์ 20+ ปี
 - 6 หลักสูตรที่เปิดสอน (code, ชื่อ, ระดับ, จำนวนวัน, คำอธิบาย, tags)
 - ผลงานเขียน 3 รายการ (คอลัมน์ Windows IT Pro, Pocket Book 2 เล่ม)
-- อีเมล `pornchai.krong@gmail.com`, Facebook `https://www.facebook.com/teachoracle`
+- โดเมน `teedba.com` (จดที่ Cloudflare) — ตั้งค่าเริ่มต้นไว้ใน `lib/site.ts`
+- อีเมล `pornchai.krong@gmail.com`, Facebook `https://www.facebook.com/teeDBA`
 - ผู้ดูแลงานอบรม: Thailand Training Center — `thailandtrainingcenter@gmail.com`, `089-408-6789`
 
 **ห้ามเติมสิ่งเหล่านี้เองเด็ดขาด:** ตัวเลขสถิติ (จำนวนผู้เรียน, จำนวนองค์กร),

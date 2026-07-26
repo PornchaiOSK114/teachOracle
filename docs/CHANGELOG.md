@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-07-26 — เชื่อมโดเมน teedba.com + อัปเดตลิงก์ Facebook
+
+### โค้ดที่แก้
+
+| ไฟล์ | เดิม | ใหม่ |
+| :--- | :--- | :--- |
+| `lib/site.ts` → `site.url` | `https://ajarntee-oracle.vercel.app` | `https://teedba.com` |
+| `lib/site.ts` → `author.facebook` | `.../teachoracle` | `https://www.facebook.com/teeDBA` |
+| `.env.example`, `AGENTS.md` | — | อัปเดตตามค่าใหม่ |
+
+การเปลี่ยน `site.url` ที่จุดเดียวมีผลกับ canonical, Open Graph, Twitter Card,
+`sitemap.xml`, `feed.xml`, `llms.txt` และ JSON-LD ทุกก้อนพร้อมกัน
+
+### Vercel (โครงการ `teach-oracle`)
+
+- เพิ่ม `teedba.com` → Production
+- เพิ่ม `www.teedba.com` → **308 Permanent Redirect** ไปที่ `teedba.com`
+
+> ⚠️ Vercel ติ๊ก "Redirect apex domains to www (recommended)" มาให้เป็นค่าเริ่มต้น — **เอาออก**
+> เพราะเว็บนี้ใช้ apex (`teedba.com`) เป็น canonical ตามชื่อแบรนด์ ถ้าปล่อยไว้
+> canonical ในโค้ดจะชี้ไปยัง URL ที่ถูก redirect ซึ่งเสีย SEO
+>
+> เลือก **308 (ถาวร)** แทน 307 (ชั่วคราว) เพื่อบอก Google ชัดเจนว่าตัวจริงคือ apex
+
+### Cloudflare DNS (teedba.com)
+
+| Type | Name | Content | Proxy |
+| :--- | :--- | :--- | :--- |
+| CNAME | `teedba.com` (@) | `f35c3a5e8d745821.vercel-dns-017.com` | **DNS only** |
+| CNAME | `www` | `f35c3a5e8d745821.vercel-dns-017.com` | **DNS only** |
+
+> ⚠️ Proxy ต้องเป็น **DNS only** (เมฆสีเทา) ตามที่ Vercel ระบุ Cloudflare จะขึ้นแบนเนอร์
+> ชวนให้เปิด proxy — **อย่าเปิด** เพราะจะชนกับ SSL/CDN ของ Vercel
+>
+> ค่า `f35c3a5e8d745821...` เป็นค่าเฉพาะของโครงการนี้ ถ้าย้ายโครงการต้องดูค่าใหม่จาก
+> Vercel › Settings › Domains › View DNS configuration
+
+### ผลการตรวจ
+
+| รายการ | ผล |
+| :--- | :--- |
+| `https://teedba.com` | ✅ เปิดได้ SSL ถูกต้อง เนื้อหาครบ |
+| `https://www.teedba.com` | ✅ redirect มาที่ `teedba.com` |
+| `https://teedba.com/opengraph-image` | ✅ **รูป OG ขึ้นสมบูรณ์ ฟอนต์ไทยครบ ไม่มีกล่องว่าง** |
+
+**ปิดประเด็นค้างจากรอบก่อน:** `next/og` ที่ทำ build worker ตาย `SIGBUS` ในแซนด์บ็อกซ์
+ทำงานได้ปกติบน Vercel ตามที่คาดไว้ — ยืนยันด้วยตาแล้วว่าเป็นข้อจำกัดสภาพแวดล้อม ไม่ใช่บั๊กโค้ด
+
+---
+
 ## 2026-07-25 — เพิ่ม Favicon
 
 ทำ favicon จาก **brand mark บนแถบเมนู** (กรอบสี่เหลี่ยมมุมมนสีขาว + ไอคอนฐานข้อมูลทรงกระบอกสีแดงอิฐ)

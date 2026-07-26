@@ -8,8 +8,8 @@
 export const site = {
   name: 'อาจารย์ตี๋ที่สอน Oracle',
   shortName: 'อาจารย์ตี๋',
-  // ยังไม่มีโดเมนของตัวเอง — ใช้ URL ของ Vercel ไปก่อน แล้วตั้ง NEXT_PUBLIC_SITE_URL ทับเมื่อจดโดเมนแล้ว
-  url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://ajarntee-oracle.vercel.app',
+  // โดเมนจริง (จดที่ Cloudflare) — ตั้ง NEXT_PUBLIC_SITE_URL ทับได้ถ้าต้องการชี้ไปที่อื่น
+  url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://teedba.com',
   locale: 'th_TH',
   lang: 'th',
   description:
@@ -24,7 +24,7 @@ export const author = {
   credential: 'Oracle Certified Professional (OCP)',
   yearsExperience: '20+',
   email: 'pornchai.krong@gmail.com',
-  facebook: 'https://www.facebook.com/teachoracle',
+  facebook: 'https://www.facebook.com/teeDBA',
   facebookLabel: 'อาจารย์ตี๋ที่สอน Oracle',
   /** initials ใช้แทนรูปโปรไฟล์ตอนยังไม่มีไฟล์รูป */
   initials: 'ตี๋',
