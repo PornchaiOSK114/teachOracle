@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Thai, IBM_Plex_Mono } from 'next/font/google';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import JsonLd from '@/components/JsonLd';
+import Analytics from '@/components/Analytics';
 import { site, author } from '@/lib/site';
 import './globals.css';
 
@@ -90,6 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Navbar />
         <main id="main">{children}</main>
         <Footer />
+        <Analytics />
         <JsonLd
           data={[
             {

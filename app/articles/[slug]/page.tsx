@@ -7,6 +7,7 @@ import rehypeSlug from 'rehype-slug';
 import rehypeHighlight from 'rehype-highlight';
 import ArticleCard from '@/components/ArticleCard';
 import JsonLd from '@/components/JsonLd';
+import { mdxComponents } from '@/components/mdx';
 import {
   getArticle,
   getArticleSlugs,
@@ -112,6 +113,7 @@ export default async function ArticlePage({ params }: Props) {
       <div className="prose">
         <MDXRemote
           source={article.content}
+          components={mdxComponents}
           options={{
             mdxOptions: {
               remarkPlugins: [remarkGfm],

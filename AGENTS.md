@@ -69,7 +69,11 @@ components/
 ├── Footer.tsx  JsonLd.tsx  ArticleCard.tsx  CourseCard.tsx
 ├── ArticleList.tsx         'use client' — ค้นหา + กรองหมวด (useMemo)
 ├── NewsletterForm.tsx      'use client' — ฟอร์มรับข่าว + PDPA consent
-└── AssetImage.tsx          server — มีไฟล์รูป→<Image>, ไม่มี→placeholder
+├── AssetImage.tsx          server — มีไฟล์รูป→<Image>, ไม่มี→placeholder
+├── Analytics.tsx           server — Cloudflare beacon (โหลดเมื่อมี env CF token)
+└── mdx/index.tsx           component ที่เรียกจากในไฟล์ .mdx ได้
+                            (YouTube, Vimeo, SoundCloud, Audio, Figure, Callout, ExternalLink)
+                            ⚠️ เพิ่ม component ใหม่ต้องอัปเดต WRITING_GUIDE.md ด้วย
 lib/
 ├── site.ts                 📌 ข้อมูลจริงทั้งหมดอยู่ที่นี่ที่เดียว
 └── content.ts              อ่าน MDX, draft, related-by-tag, วันที่ พ.ศ., TOC
@@ -159,6 +163,20 @@ Turbopack จะพังด้วย `the chunking context does not support ext
 **I. Favicon** สร้างจากสคริปต์ PIL (ดู `docs/CHANGELOG.md`) ไม่ได้ใช้ `next/og`
 เพราะ `next/og` ทำ worker ตาย SIGBUS ในแซนด์บ็อกซ์ จึงตรวจสอบไม่ได้
 ถ้าจะแก้ไอคอน ให้แก้ `app/icon.svg` แล้ว re-render ไฟล์ `.ico`/`.png` ให้ตรงกัน
+
+## เอกสารในโปรเจ็ค — อ่านอันไหนเมื่อไหร่
+
+| ไฟล์ | เนื้อหา |
+| :--- | :--- |
+| `AGENTS.md` (ไฟล์นี้) | สถาปัตยกรรม กติกา gotchas — **อ่านก่อนแตะโค้ดเสมอ** |
+| `README.md` | โครงสร้างโปรเจ็ค ชุดสี คำสั่ง ฟีเจอร์ |
+| `WRITING_GUIDE.md` | คู่มือเขียนบทความสำหรับเจ้าของเว็บ (ไม่ใช่ agent) |
+| `docs/AGENT_PLAYBOOK.md` | สูตรสร้างเว็บแบบนี้ซ้ำ + gotchas ฉบับเต็มพร้อมคำสั่ง |
+| `docs/ANALYTICS.md` | Cloudflare Analytics + Search Console (ตั้งค่า + วิธีอ่าน) |
+| `docs/CHANGELOG.md` | ประวัติการเปลี่ยนแปลงและเหตุผล |
+
+**เมื่อแก้อะไรที่กระทบผู้ใช้ ให้อัปเดตเอกสารที่เกี่ยวข้องด้วยเสมอ**
+โดยเฉพาะ: เพิ่ม MDX component → `WRITING_GUIDE.md` · เจอ gotcha ใหม่ → `AGENT_PLAYBOOK.md`
 
 ## Design source of truth
 

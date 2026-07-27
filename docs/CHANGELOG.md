@@ -4,6 +4,88 @@
 
 ---
 
+## 2026-07-26 — ชุดเอกสารครบ + ความสามารถฝังวิดีโอ/เสียง
+
+### โค้ดที่เพิ่ม (ทำก่อนเขียนเอกสาร เพื่อไม่ให้เอกสารโกหก)
+
+`components/mdx/index.tsx` — component ที่เรียกใช้จากในไฟล์ `.mdx` ได้โดยตรง
+
+| Component | ใช้ทำอะไร |
+| :--- | :--- |
+| `<YouTube id="..." />` | ฝังวิดีโอ YouTube (ใช้ `youtube-nocookie.com` ไม่วาง cookie) |
+| `<Vimeo id="..." />` | ฝังวิดีโอ Vimeo (ใส่ `dnt=1`) |
+| `<SoundCloud url="..." />` | ฝังเสียงจาก SoundCloud |
+| `<Audio src="..." />` | ไฟล์เสียงของเราเองใน `public/audio/` |
+| `<Figure src alt caption />` | รูปพร้อมคำบรรยายใต้ภาพ |
+| `<Callout type="warning">` | กล่องเน้นข้อความ 3 แบบ (tip / warning / danger) |
+| `<ExternalLink href="...">` | ลิงก์เปิดแท็บใหม่แบบปลอดภัย |
+
+- เชื่อมเข้า `MDXRemote` ผ่าน prop `components`
+- CSS เพิ่มใน `globals.css` หมวด 13b (embed) และ 13c (callout)
+- วิดีโอทุกตัว `loading="lazy"` + ใช้ `aspect-ratio` จองพื้นที่ล่วงหน้า → **ไม่เกิด CLS**
+- เลือกโดเมนแบบไม่วาง cookie ให้สอดคล้องกับที่เว็บนี้ไม่มีแบนเนอร์ขอความยินยอม
+
+### เอกสารที่สร้าง/ขยาย
+
+| ไฟล์ | สถานะ | เนื้อหา |
+| :--- | :--- | :--- |
+| `WRITING_GUIDE.md` | 🆕 ใหม่ | คู่มือเขียนบทความ 14 หัวข้อ — frontmatter, Markdown, โค้ด SQL, ตาราง, รูป, ลิงก์, ฝังวิดีโอ/เสียง, callout, **เทคนิคเขียนให้ติด Google/AI 6 ข้อ**, checklist ก่อนเผยแพร่, ตารางแก้ปัญหา |
+| `README.md` | ขยาย | เพิ่มแผนผัง directory แบบมีคำอธิบายรายไฟล์, ชุดสีทั้ง light/dark, ตารางคำสั่ง, สรุปฟีเจอร์ 3 กลุ่ม, ตาราง env, ข้อมูลโครงสร้างพื้นฐาน |
+| `docs/AGENT_PLAYBOOK.md` | 🆕 ใหม่ | สูตรสร้างเว็บซ้ำ — **gotchas 11 ข้อจากปัญหาจริง** พร้อมคำสั่ง verification ที่ใช้ได้จริง |
+| `docs/ANALYTICS.md` | ขยาย | เพิ่มหมวด 3–4: วิธีอ่านตัวเลข Cloudflare + Search Console และ**เทคนิคใช้ Queries เลือกหัวข้อบทความถัดไป** |
+| `AGENTS.md` | ขยาย | เพิ่มรายการ MDX components + ตารางว่าเอกสารไหนอ่านเมื่อไหร่ |
+| `content/articles/_template-execution-plan.mdx` | ปรับ | ทำเป็นตัวอย่างเต็มที่ใช้ทุกฟีเจอร์ (ตาราง 4 คอลัมน์, callout 2 แบบ, โค้ด SQL 2 ก้อน) + คอมเมนต์ตัวอย่างการใช้ component ทุกตัว |
+
+### ผลการตรวจ
+
+| รายการ | ผล |
+| :--- | :--- |
+| `tsc --noEmit` | ✅ ผ่าน |
+| `next build` | ✅ prerender 16/16 หน้า |
+| `<Callout>` 2 แบบ render เป็น HTML | ✅ พบคลาส `callout-tip` และ `callout-warning` |
+| ตาราง Markdown 4 คอลัมน์ | ✅ พบ `<th>` 4 อัน |
+| code highlight | ✅ พบคลาส `hljs` |
+| คอมเมนต์ MDX `{/* */}` ไม่หลุดออกหน้าเว็บ | ✅ ตรวจแล้วไม่มี |
+| ไม่มี component ที่ render ไม่ออก | ✅ ไม่พบ `<Callout` หรือ `<YouTube` ดิบใน HTML |
+
+---
+
+## 2026-07-26 — ติดตั้งระบบสถิติ: Cloudflare Web Analytics + Google Search Console
+
+รายละเอียดเต็มอยู่ที่ [`docs/ANALYTICS.md`](./ANALYTICS.md)
+
+### Cloudflare Web Analytics
+
+- `components/Analytics.tsx` — โหลด beacon ผ่าน `next/script` (`strategy="afterInteractive"`)
+- เรียกใช้ใน `app/layout.tsx` ท้าย `<body>`
+- token เก็บใน env `NEXT_PUBLIC_CF_BEACON_TOKEN` ตั้งบน Vercel **เฉพาะ Production**
+  (กันยอดจาก preview / `npm run dev` ปนสถิติจริง) — ไม่ตั้ง = ไม่โหลดสคริปต์
+
+> ⚠️ **กับดักที่เกือบพลาด:** ตอนสร้าง site Cloudflare ตั้งเป็น "Automatic setup" ให้เอง
+> ซึ่งฉีดสคริปต์ผ่าน **proxy** เท่านั้น แต่ DNS เราเป็น **DNS only** ตามที่ Vercel กำหนด
+> ⇒ จะไม่มีข้อมูลเข้าเลยทั้งที่หน้าเว็บดูปกติ
+> ต้องเข้า Manage site เปลี่ยนเป็น **"Enable with JS Snippet installation"** แล้วใส่สคริปต์เอง
+
+เลือก Cloudflare เพราะ **ไม่ใช้ cookie** จึงไม่ต้องทำแบนเนอร์ขอความยินยอมตาม PDPA
+และเบากว่า GA4 ซึ่งสอดคล้องกับที่ออกแบบเว็บมาให้ JS น้อยที่สุด
+
+### Google Search Console
+
+- สร้าง **Domain property** `sc-domain:teedba.com` (ครอบคลุมทุก subdomain + http/https)
+- ยืนยันด้วย TXT record ที่ Cloudflare:
+  `google-site-verification=7SNtCMPbot8RrG68bpwidGhXBG-G7HZFyKycz9X4Y8A` → **Ownership verified**
+- ส่ง `https://teedba.com/sitemap.xml` → สถานะ **Success · Discovered pages 6**
+
+> Google เสนอยืนยันอัตโนมัติโดยขอสิทธิ์ OAuth เข้าถึงบัญชี Cloudflare DNS
+> **เลือกไม่ใช้** ใส่ TXT record เองแทน เพื่อไม่ต้องให้สิทธิ์ข้ามบัญชีโดยไม่จำเป็น
+
+> ⚠️ ห้ามลบ TXT record นี้ ไม่งั้นเสียสิทธิ์การยืนยันและข้อมูลหายทั้งหมด
+
+**หมายเหตุ:** ตอนเพิ่งส่ง sitemap สถานะจะขึ้น "Couldn't fetch" อยู่ครู่หนึ่ง
+เป็นเรื่องปกติ (Google ยังไม่ได้ดึงจริง) รีเฟรชอีกครั้งแล้วขึ้น Success
+
+---
+
 ## 2026-07-26 — เชื่อมโดเมน teedba.com + อัปเดตลิงก์ Facebook
 
 ### โค้ดที่แก้
