@@ -1,0 +1,372 @@
+---
+title: "ORA-01555 snapshot too old — สาเหตุจริงและวิธีแก้ที่ไม่ใช่แค่เพิ่ม UNDO"
+description: "ORA-01555 ไม่ได้แปลว่า undo tablespace เล็กเสมอไป — วิธีหาสาเหตุจริงจาก V$UNDOSTAT พร้อม 4 สาเหตุที่พบบ่อยและทางแก้ที่ตรงจุดของแต่ละแบบ"
+tldr: "ORA-01555 ไม่ได้แปลว่า undo tablespace เล็กเกินไป แต่แปลว่า Oracle หา before image ที่ query กำลังอ่านอยู่ไม่เจอเพราะถูกเขียนทับไปแล้ว ให้ดู V$UNDOSTAT ที่คอลัมน์ MAXQUERYLEN, MAXQUERYSQLID และ SSOLDERRCNT เพื่อหาว่า query ตัวไหนเป็นต้นเหตุก่อน ถ้าเจอ COMMIT อยู่ใน loop ของ cursor ให้แก้โค้ดก่อน เพราะเพิ่มพื้นที่ undo ไม่ช่วยกรณีนั้น"
+category: "DBA"
+tags: ["ORA-01555", "UNDO", "Read Consistency", "Troubleshooting"]
+date: "2026-07-29"
+draft: false
+---
+
+{/*
+  ══════════════════════════════════════════════════════════════════════
+  📌 บทความนี้ร่างโดย AI agent ตาม WRITING_GUIDE.md
+
+  ⚠️ ก่อนเผยแพร่ อาจารย์ตี๋ควรตรวจ 2 อย่าง:
+     1. จุดที่มีเครื่องหมาย ✏️ — ใส่เคสจริงแทน (ตอนนี้เว้นไว้ ไม่ได้แต่งเอง)
+     2. ยืนยันข้อเท็จจริงทางเทคนิคว่าตรงกับที่เจอหน้างานจริง
+
+  🖼️ ยังไม่ใส่ <Figure> เพราะยังไม่มีไฟล์ภาพจริง (ใส่ไปจะได้รูปแตก)
+     ภาพที่แนะนำให้ทำ 2 ใบ — รายละเอียดอยู่ท้ายไฟล์
+  ══════════════════════════════════════════════════════════════════════
+*/}
+
+`ORA-01555: snapshot too old` **ไม่ได้แปลว่า undo tablespace เล็กเกินไป** แต่แปลว่า
+Oracle หา "ภาพของข้อมูลก่อนถูกแก้" ที่ query กำลังอ่านอยู่ไม่เจอ เพราะพื้นที่นั้นถูกเขียนทับไปแล้ว
+
+การเพิ่มขนาด undo tablespace ช่วยได้ในบางกรณีเท่านั้น และมีอย่างน้อยสองกรณีที่
+**เพิ่มเท่าไหร่ก็ไม่หาย** เพราะต้นเหตุไม่ได้อยู่ที่พื้นที่ บทความนี้พาไล่หาว่าเป็นกรณีไหน
+
+## ORA-01555 เกิดจากอะไรกันแน่
+
+Oracle รับประกันสิ่งที่เรียกว่า **read consistency** — query ที่เริ่มตอน 09:00
+ต้องเห็นข้อมูล ณ เวลา 09:00 เท่านั้น ไม่ว่าจะรันนานแค่ไหนก็ตาม
+
+ถ้าระหว่างที่ query ยังทำงานอยู่ มีคนอื่นมาแก้แถวที่ query จะต้องอ่าน Oracle จะไม่ให้
+query เห็นค่าใหม่ แต่จะไป**ประกอบค่าเดิมกลับคืน**จากข้อมูลใน undo แทน
+
+```text
+09:00  query เริ่ม (SCN = 1000)
+09:05  session อื่น UPDATE แถวที่ query ยังอ่านไม่ถึง → ค่าเดิมถูกเก็บลง undo
+09:30  query อ่านมาถึงแถวนั้น
+         → เห็นค่าใหม่ในบล็อก แต่ต้องการค่า ณ SCN 1000
+         → ไปอ่านค่าเดิมจาก undo กลับมาประกอบ
+```
+
+ปัญหาเกิดเมื่อถึงขั้นตอนสุดท้ายแล้ว **ค่าเดิมใน undo ถูกเขียนทับไปแล้ว** โดยธุรกรรมอื่น
+Oracle จึงไม่มีทางประกอบภาพ ณ SCN 1000 ขึ้นมาได้ และเลือกที่จะโยน error ออกมา
+แทนที่จะคืนข้อมูลผิด
+
+<Callout title="ทำไม Oracle ถึงยอมเขียนทับ undo ที่ยังมีคนใช้อยู่">
+
+เพราะ `UNDO_RETENTION` เป็นแค่ **เป้าหมาย** ไม่ใช่การรับประกัน
+เมื่อพื้นที่ undo ใกล้เต็ม Oracle จะเลือกให้ธุรกรรมใหม่ทำงานต่อได้
+โดยยอมเขียนทับ undo ที่ยังไม่หมดอายุ แล้วปล่อยให้ query เก่าตายไปแทน
+
+จะเปลี่ยนพฤติกรรมนี้ได้ต้องสั่ง `RETENTION GUARANTEE` — ซึ่งมีราคาที่ต้องจ่าย
+อ่านต่อในหัวข้อท้ายบทความ
+
+</Callout>
+
+## ทำไมเพิ่ม UNDO อย่างเดียวถึงไม่พอ
+
+เพราะ ORA-01555 เป็นสมการที่มีสามตัวแปร ไม่ใช่ตัวเดียว
+
+| ตัวแปร | ทำให้แย่ลงเมื่อ | เพิ่มพื้นที่ undo ช่วยไหม |
+| :--- | :--- | :---: |
+| **query รันนานแค่ไหน** | query ยิ่งนาน ยิ่งต้องการ undo ย้อนหลังไกล | ช่วยทางอ้อม |
+| **DML หนักแค่ไหนระหว่างนั้น** | ยิ่งแก้ข้อมูลเยอะ undo ยิ่งถูกหมุนเร็ว | ช่วย |
+| **โค้ดทำลาย undo ของตัวเองหรือเปล่า** | มี `COMMIT` อยู่ใน loop ของ cursor | ❌ **ไม่ช่วย** |
+
+ตัวแปรที่สามคือกรณีที่คนพลาดบ่อยที่สุด เพราะเพิ่ม undo tablespace ไปเท่าไหร่ก็ยังเจอ error เหมือนเดิม
+แล้วสรุปว่า "เพิ่มไม่พอ" ทั้งที่ปัญหาอยู่ในโค้ด
+
+## หาสาเหตุจริงจาก V$UNDOSTAT ก่อนลงมือแก้
+
+ก่อนแตะพารามิเตอร์ใด ๆ ให้ดูตัวเลขจริงก่อนเสมอ `V$UNDOSTAT` เก็บสถิติเป็นช่วงละ 10 นาที
+ย้อนหลังประมาณ 4 วัน
+
+```sql
+SELECT TO_CHAR(begin_time, 'DD-MM HH24:MI') AS ช่วงเวลา,
+       maxquerylen         AS query_นานสุด_วินาที,
+       maxquerysqlid       AS sql_id,
+       tuned_undoretention AS retention_จริงที่ใช้,
+       ssolderrcnt         AS จำนวน_ora_01555,
+       nospaceerrcnt       AS จำนวน_undo_เต็ม
+  FROM v$undostat
+ WHERE ssolderrcnt > 0
+    OR nospaceerrcnt > 0
+ ORDER BY begin_time DESC;
+```
+
+อ่านผลลัพธ์แบบนี้
+
+| คอลัมน์ | บอกอะไร |
+| :--- | :--- |
+| `SSOLDERRCNT` | จำนวน ORA-01555 ที่เกิดในช่วงนั้น — ใช้ยืนยันว่าเกิดจริงและเกิดตอนไหน |
+| `NOSPACEERRCNT` | จำนวนครั้งที่ undo เต็มจนธุรกรรมทำงานไม่ได้ — **ถ้าตัวนี้ > 0 แปลว่าพื้นที่ไม่พอจริง** |
+| `MAXQUERYLEN` | query ที่นานที่สุดในช่วงนั้น (วินาที) |
+| `MAXQUERYSQLID` | `sql_id` ของ query ตัวนั้น — **นี่คือเบาะแสที่มีค่าที่สุด** |
+| `TUNED_UNDORETENTION` | ค่า retention ที่ Oracle ปรับใช้จริง เทียบกับ `UNDO_RETENTION` ที่เราตั้งไว้ |
+
+<Callout type="tip" title="ตีความให้ถูกใน 10 วินาที">
+
+`NOSPACEERRCNT` = 0 แต่ `SSOLDERRCNT` > 0 → **พื้นที่ไม่ใช่ปัญหา** ให้ไปดูที่ query และโค้ด
+
+`NOSPACEERRCNT` > 0 ด้วย → พื้นที่ undo ไม่พอจริง การขยายมีเหตุผลรองรับ
+
+</Callout>
+
+ได้ `sql_id` มาแล้วก็ตามตัวต่อ
+
+```sql
+SELECT sql_id, elapsed_time/1e6 AS วินาทีรวม, executions, sql_fulltext
+  FROM v$sql
+ WHERE sql_id = '&sql_id';
+```
+
+เทียบค่าที่ตั้งไว้กับค่าที่ Oracle ใช้จริง
+
+```sql
+SHOW PARAMETER undo_retention
+
+SELECT tablespace_name, retention, contents
+  FROM dba_tablespaces
+ WHERE contents = 'UNDO';
+```
+
+คอลัมน์ `RETENTION` จะเป็น `GUARANTEE` หรือ `NOGUARANTEE` — ค่าเริ่มต้นคือ `NOGUARANTEE`
+
+## สาเหตุที่ 1 — COMMIT อยู่ใน loop ของ cursor
+
+นี่คือรูปแบบที่เจอบ่อยที่สุดและเป็นกรณีที่**เพิ่ม undo ไม่ช่วยเลย** ภาษาอังกฤษเรียกว่า
+*fetch across commit*
+
+```plsql
+DECLARE
+  CURSOR c IS SELECT order_id FROM orders WHERE status = 'NEW';
+BEGIN
+  FOR r IN c LOOP
+    UPDATE orders SET status = 'PROCESSED' WHERE order_id = r.order_id;
+    COMMIT;                    -- ← ต้นเหตุอยู่ตรงนี้
+  END LOOP;
+END;
+/
+```
+
+เหตุผลที่พัง: cursor `c` ต้องเห็นข้อมูล ณ ตอนที่มันเปิด แต่ทุกครั้งที่ `COMMIT`
+undo ที่เซสชันนี้สร้างขึ้นเองจะกลายเป็นพื้นที่ว่างที่ระบบนำไปใช้ต่อได้ทันที
+พอ loop วนไปสักพัก undo ที่ cursor ยังต้องใช้ก็ถูกเขียนทับด้วย undo ของรอบหลัง ๆ
+**เซสชันนี้ฆ่าตัวเอง** โดยไม่ต้องมีใครมายุ่ง
+
+ทางแก้คือทำเป็นชุดด้วย `BULK COLLECT` + `FORALL` แล้ว commit ครั้งเดียวจบ
+
+```plsql
+DECLARE
+  CURSOR c IS SELECT order_id FROM orders WHERE status = 'NEW';
+  TYPE t_ids IS TABLE OF orders.order_id%TYPE;
+  v_ids t_ids;
+BEGIN
+  OPEN c;
+  LOOP
+    FETCH c BULK COLLECT INTO v_ids LIMIT 10000;
+    EXIT WHEN v_ids.COUNT = 0;
+
+    FORALL i IN 1 .. v_ids.COUNT
+      UPDATE orders SET status = 'PROCESSED'
+       WHERE order_id = v_ids(i);
+  END LOOP;
+  CLOSE c;
+  COMMIT;                      -- commit ครั้งเดียวหลังจบงาน
+END;
+/
+```
+
+<Callout type="warning" title="ถ้าจำเป็นต้อง commit เป็นช่วงจริง ๆ">
+
+งานที่แก้ข้อมูลหลายสิบล้านแถวอาจ commit ครั้งเดียวไม่ไหว
+ในกรณีนั้นอย่าใช้ cursor ตัวเดิมค้างข้าม commit — ให้แบ่งงานเป็นรอบด้วยเงื่อนไข
+ที่ระบุช่วงชัดเจน (เช่น ช่วง `order_id` หรือช่วงวันที่) แล้วเปิด query ใหม่ในแต่ละรอบ
+เพื่อให้แต่ละรอบเป็นธุรกรรมที่จบในตัวเอง ไม่ต้องพึ่ง undo ของรอบก่อนหน้า
+
+</Callout>
+
+✏️ *[จุดนี้เหมาะจะใส่เคสจริงที่อาจารย์เคยเจอ — ระบบอะไร โค้ดเดิมเขียนแบบไหน
+แก้แล้วเวลาที่ใช้ลดลงเท่าไหร่ ถ้ามีตัวเลขจริงจะมีน้ำหนักมาก]*
+
+## สาเหตุที่ 2 — report ยาวชนกับงาน batch
+
+รูปแบบคลาสสิกอีกแบบคือ query ที่รันนานหลายสิบนาที (รายงานสิ้นเดือน, export ข้อมูล)
+บังเอิญไปทับกับช่วงที่ batch กำลังแก้ข้อมูลหนัก
+
+กรณีนี้ต่างจากข้อแรกตรงที่**ไม่มีใครเขียนโค้ดผิด** ทั้งสองฝั่งทำงานถูกต้อง แต่มาชนกันเรื่องเวลา
+วิธีแก้จึงมีหลายทางเลือกตามความเหมาะสม
+
+| ทางแก้ | เหมาะเมื่อ | ข้อควรระวัง |
+| :--- | :--- | :--- |
+| เลื่อนเวลาไม่ให้ทับกัน | มีช่วงว่างในตาราง batch | บางระบบไม่มีช่วงว่างจริง |
+| ทำให้ query เร็วขึ้น (index / เขียนใหม่) | query ยังปรับได้ | ต้องมีเวลาวิเคราะห์ |
+| ขยาย undo tablespace + เปิด autoextend | `NOSPACEERRCNT` > 0 ด้วย | กินพื้นที่ดิสก์เพิ่ม |
+| แยกรายงานไปอ่านจาก standby | มี Active Data Guard | มีค่าไลเซนส์เพิ่ม |
+
+<Callout type="tip">
+
+ก่อนขยาย undo tablespace ให้เช็คก่อนว่าเปิด autoextend อยู่หรือเปล่า
+เพราะพฤติกรรมการปรับ retention อัตโนมัติของ Oracle ต่างกันระหว่างไฟล์ขนาดคงที่กับไฟล์ที่ขยายได้
+
+```sql
+SELECT file_name, bytes/1024/1024 AS mb, autoextensible, maxbytes/1024/1024 AS max_mb
+  FROM dba_data_files
+ WHERE tablespace_name = (SELECT tablespace_name FROM dba_tablespaces
+                           WHERE contents = 'UNDO' AND ROWNUM = 1);
+```
+
+</Callout>
+
+## สาเหตุที่ 3 — LOB ที่ไม่เกี่ยวกับ undo tablespace เลย
+
+นี่คือกรณีที่ทำให้คนงงที่สุด เพราะ**ขยาย undo tablespace เท่าไหร่ก็ไม่มีผล**
+
+คอลัมน์ `BLOB` / `CLOB` ที่เก็บแบบ out-of-line ไม่ได้ใช้ undo tablespace ในการทำ
+read consistency แต่เก็บเวอร์ชันเก่าไว้ใน **LOB segment ของตัวเอง** และควบคุมด้วย
+`PCTVERSION` หรือ `RETENTION` ที่ตั้งไว้ที่ LOB นั้น ไม่ใช่ `UNDO_RETENTION` ของระบบ
+
+วิธีดูว่า LOB ตัวไหนตั้งค่าอย่างไร
+
+```sql
+SELECT table_name, column_name, segment_name,
+       pctversion, retention, securefile
+  FROM dba_lobs
+ WHERE owner = 'APPUSER';
+```
+
+<Callout type="warning" title="สัญญาณว่ากำลังเจอ LOB case">
+
+ถ้า ORA-01555 เกิดกับ query ที่อ่านคอลัมน์ LOB และ `V$UNDOSTAT` แสดงว่า
+`NOSPACEERRCNT` = 0 มาตลอด — โอกาสสูงมากว่าปัญหาอยู่ที่ LOB segment ไม่ใช่ undo tablespace
+ให้ไปดู `PCTVERSION` / `RETENTION` ของ LOB นั้นแทน
+
+</Callout>
+
+✏️ *[อาจารย์เคยเจอเคส LOB แบบนี้ไหมครับ ถ้าเคยจะเป็นตัวอย่างที่หาอ่านที่อื่นได้ยากมาก
+เพราะบทความส่วนใหญ่ในเน็ตพูดถึงแต่ undo tablespace]*
+
+## สาเหตุที่ 4 — delayed block cleanout
+
+กรณีนี้พบน้อยกว่าสามข้อแรกมาก แต่มีจริงและอธิบายได้ว่าทำไมบางครั้ง ORA-01555
+เกิดกับ query ที่รันไม่นานเลย
+
+เมื่อธุรกรรมขนาดใหญ่ commit Oracle ไม่ได้กลับไปแตะบล็อกทุกก้อนที่แก้ไปเพื่อประทับว่า
+"commit แล้ว" (ถ้าทำจะช้ามาก) แต่ปล่อยให้คนที่มาอ่านทีหลังเป็นคนเก็บกวาดให้ เรียกว่า
+*delayed block cleanout*
+
+ผู้อ่านคนนั้นต้องย้อนไปดูข้อมูลธุรกรรมในส่วนหัวของ undo segment เพื่อรู้ว่า commit ตอน SCN ไหน
+ถ้าข้อมูลตรงนั้นถูกใช้ซ้ำจนหายไปแล้ว และ query ก็ไม่มีทางพิสูจน์ได้ว่าธุรกรรมนั้น commit
+ก่อนหรือหลังตัวเองเริ่ม Oracle จะเลือกโยน ORA-01555 แทนการเดา
+
+สถานการณ์ที่มักเจอคือ **โหลดข้อมูลก้อนใหญ่เสร็จแล้วรัน query บนตารางนั้นทันที**
+ทางแก้ง่ายที่สุดคือรัน full scan หนึ่งรอบหลังโหลดเสร็จเพื่อบังคับให้เกิด cleanout ให้จบไปเลย
+
+```sql
+SELECT /*+ FULL(t) */ COUNT(*) FROM orders t;
+```
+
+<Callout>
+
+เทคนิคนี้ได้ผลกับตารางที่เพิ่งโหลดข้อมูลเข้าไปเยอะ ๆ เพราะบังคับให้บล็อกทั้งหมด
+ถูกอ่านและเก็บกวาดในรอบเดียว ก่อนที่ผู้ใช้จริงจะเข้ามาเจอ
+
+</Callout>
+
+## RETENTION GUARANTEE ใช้เมื่อไหร่ และมีราคาเท่าไหร่
+
+`RETENTION GUARANTEE` สั่งให้ Oracle **ห้ามเขียนทับ undo ที่ยังไม่หมดอายุตาม `UNDO_RETENTION`
+เด็ดขาด** ไม่ว่าจะอย่างไรก็ตาม
+
+```sql
+ALTER TABLESPACE undotbs1 RETENTION GUARANTEE;
+```
+
+ฟังดูเหมือนเป็นคำตอบของทุกอย่าง แต่มันแค่**ย้ายปัญหาไปอีกฝั่ง**
+
+<Callout type="danger" title="ราคาที่ต้องจ่ายของ RETENTION GUARANTEE">
+
+เมื่อ undo เต็มและไม่มี undo ที่หมดอายุให้เขียนทับ Oracle จะไม่ยอมเสีย undo ที่ต้องรักษาไว้
+จึงเลือก**ให้ธุรกรรมใหม่ล้มเหลว**แทน ด้วย `ORA-30036: unable to extend segment
+by N in undo tablespace`
+
+พูดอีกแบบคือ แลกจาก "รายงานพัง" เป็น "ระบบเขียนข้อมูลไม่ได้" ซึ่งในระบบ OLTP
+มักรุนแรงกว่ามาก
+
+ก่อนเปิดต้องมั่นใจว่า undo tablespace ใหญ่พอและเปิด autoextend ไว้แล้ว
+และควรทดสอบบนระบบ test ก่อนเสมอ
+
+</Callout>
+
+สรุปว่าควรใช้เมื่อไหร่
+
+| สถานการณ์ | เหมาะกับ `RETENTION GUARANTEE` ไหม |
+| :--- | :--- |
+| Data warehouse ที่ query ยาวสำคัญกว่าการเขียน | ✅ เหมาะ |
+| ระบบที่ต้องใช้ Flashback Query ย้อนหลังแน่นอน | ✅ เหมาะ |
+| OLTP ที่ห้ามเขียนข้อมูลไม่ได้เด็ดขาด | 🛑 อันตราย |
+| ยังไม่รู้ว่าต้นเหตุคืออะไร | 🛑 หาสาเหตุก่อน |
+
+## เช็คลิสต์เมื่อเจอ ORA-01555
+
+ทำตามลำดับนี้ อย่าข้ามไปแก้พารามิเตอร์ก่อน
+
+1. ดู `V$UNDOSTAT` — `SSOLDERRCNT` ยืนยันว่าเกิดจริง · `NOSPACEERRCNT` บอกว่าพื้นที่พอไหม
+2. เอา `MAXQUERYSQLID` ไปตามหา query ต้นเหตุใน `V$SQL`
+3. เปิดโค้ดของ query นั้นดูว่ามี `COMMIT` อยู่ใน loop หรือเปล่า → **มี ให้แก้โค้ดก่อน**
+4. ถ้า query อ่านคอลัมน์ LOB → ไปดู `DBA_LOBS` ไม่ใช่ undo tablespace
+5. ถ้าเพิ่งโหลดข้อมูลก้อนใหญ่มา → ลอง full scan หนึ่งรอบเพื่อบังคับ cleanout
+6. ถ้าทั้งหมดข้างบนไม่ใช่ และ `NOSPACEERRCNT` > 0 → ค่อยขยาย undo tablespace
+7. พิจารณา `RETENTION GUARANTEE` เป็นทางเลือกสุดท้าย และเฉพาะเมื่อรับความเสี่ยง ORA-30036 ได้
+
+## เอกสารอ้างอิง
+
+- <ExternalLink href="https://docs.oracle.com/en/database/oracle/oracle-database/19/admin/managing-undo.html">Oracle Database Administrator's Guide — Managing Undo</ExternalLink> — การจัดการ undo tablespace และ retention
+- <ExternalLink href="https://docs.oracle.com/en/database/oracle/oracle-database/19/cncpt/data-concurrency-and-consistency.html">Oracle Database Concepts — Data Concurrency and Consistency</ExternalLink> — กลไก read consistency ฉบับเต็ม
+- <ExternalLink href="https://docs.oracle.com/en/database/oracle/oracle-database/19/adlob/">Oracle Database SecureFiles and Large Objects Developer's Guide</ExternalLink> — เรื่อง LOB retention
+
+## สรุป
+
+**ORA-01555 คือปัญหาเรื่องเวลา ไม่ใช่เรื่องพื้นที่เสมอไป** — undo ที่ query ต้องใช้
+ถูกเขียนทับไปก่อนที่ query จะอ่านถึง
+
+ลำดับการวินิจฉัยที่ประหยัดเวลาที่สุดคือดู `NOSPACEERRCNT` ใน `V$UNDOSTAT` ก่อน
+ถ้าเป็นศูนย์แปลว่าพื้นที่ไม่ใช่ปัญหา ให้ไปหาที่ query และโค้ดแทน
+โดยเฉพาะรูปแบบ `COMMIT` ใน loop ที่เพิ่ม undo เท่าไหร่ก็ไม่หาย
+
+การขยาย undo tablespace เป็นทางแก้ที่ถูกต้องเฉพาะเมื่อมีตัวเลขรองรับว่าพื้นที่ไม่พอจริง
+ไม่ใช่ท่าแรกที่ควรทำ
+
+---
+
+อยากให้ทีมดูแลฐานข้อมูลได้แม่นขึ้นทั้งระบบ ดูรายละเอียด
+[หลักสูตรที่เปิดสอน](/courses) หรือ [อ่านบทความอื่น](/articles) ต่อได้เลยครับ
+
+{/*
+  ══════════════════════════════════════════════════════════════════════
+  ✏️ ภาพที่แนะนำให้ทำ 2 ใบ — ยังไม่ใส่ในบทความเพราะยังไม่มีไฟล์จริง
+     ทำเสร็จแล้ววางที่ public/images/blog/ แล้วปลดคอมเมนต์บรรทัดด้านล่าง
+     ไปวางในตำแหน่งที่ระบุ
+
+  ใบที่ 1 — วางหลังโค้ด text ในหัวข้อ "ORA-01555 เกิดจากอะไรกันแน่"
+  ชื่อไฟล์: ora-01555-read-consistency.png
+  เนื้อหาภาพ: ไทม์ไลน์แนวนอน 09:00 → 09:30 มีสองเลน
+             เลนบน = query ที่เริ่มตอน SCN 1000
+             เลนล่าง = session อื่นที่ UPDATE แล้วเขียน undo
+             จุดตัดตรง 09:30 แสดงว่า undo ที่ต้องใช้ถูกเขียนทับไปแล้ว
+  <Figure
+    src="/images/blog/ora-01555-read-consistency.png"
+    alt="ไทม์ไลน์แสดง query ที่เริ่มตอน SCN 1000 ต้องการ before image จาก undo แต่ undo ถูกธุรกรรมอื่นเขียนทับไปก่อนที่ query จะอ่านถึง"
+    caption="query ไม่ได้ตายเพราะช้า แต่ตายเพราะ undo ที่ต้องใช้หายไปก่อน"
+  />
+
+  ใบที่ 2 — วางต้นหัวข้อ "เช็คลิสต์เมื่อเจอ ORA-01555"
+  ชื่อไฟล์: ora-01555-diagnosis-flow.png
+  เนื้อหาภาพ: flowchart เริ่มจาก "เจอ ORA-01555"
+             → เช็ค NOSPACEERRCNT > 0 ?
+               ใช่  → ขยาย undo tablespace
+               ไม่ใช่ → มี COMMIT ใน loop ?  → แก้โค้ด
+                      → query อ่าน LOB ?     → ดู DBA_LOBS
+                      → เพิ่งโหลดข้อมูลใหญ่ ? → full scan บังคับ cleanout
+  <Figure
+    src="/images/blog/ora-01555-diagnosis-flow.png"
+    alt="ผังการวินิจฉัย ORA-01555 เริ่มจากตรวจ NOSPACEERRCNT แล้วแยกทางไปตามสาเหตุสี่แบบ ได้แก่ พื้นที่ไม่พอ COMMIT ใน loop ปัญหา LOB และ delayed block cleanout"
+    caption="ตรวจ NOSPACEERRCNT ก่อนเสมอ — ตอบได้ในนาทีเดียวว่าเป็นปัญหาพื้นที่หรือไม่"
+  />
+  ══════════════════════════════════════════════════════════════════════
+*/}
