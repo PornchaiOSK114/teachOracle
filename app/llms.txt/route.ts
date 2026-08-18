@@ -1,5 +1,5 @@
 import { getAllArticles } from '@/lib/content';
-import { site, author, courses, expertise, trainingPartner } from '@/lib/site';
+import { site, author, courses, expertise, trainingPartner, products } from '@/lib/site';
 
 /**
  * llms.txt — สรุปเว็บนี้ให้ AI / Generative engine อ่านเข้าใจได้ในไฟล์เดียว (AIO)
@@ -28,7 +28,8 @@ export async function GET() {
 - [บทความ](${site.url}/articles) — บทความความรู้ Oracle Database ทั้งหมด
 - [หลักสูตรที่สอน](${site.url}/courses) — 6 หลักสูตรอบรม Oracle Database แบบ In-house
 - [เกี่ยวกับอาจารย์ตี๋](${site.url}/about) — ประวัติ ผลงานเขียน และลูกค้า
-- [ผลิตภัณฑ์](${site.url}/products) — E-book / Online Course (ยังไม่เปิดขาย)
+- [ผลิตภัณฑ์](${site.url}/products) — E-book / Online Course
+${products.map((p) => `- [${p.title}](${site.url}/products/${p.slug}) — ${p.kind} ${p.pages} หน้า ราคา ${p.price} บาท: ${p.metaDesc}`).join('\n')}
 - [ติดต่อ](${site.url}/contact) — ช่องทางติดต่อ
 
 ## หลักสูตรที่เปิดสอน

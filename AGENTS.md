@@ -164,6 +164,16 @@ Turbopack จะพังด้วย `the chunking context does not support ext
 เพราะ `next/og` ทำ worker ตาย SIGBUS ในแซนด์บ็อกซ์ จึงตรวจสอบไม่ได้
 ถ้าจะแก้ไอคอน ให้แก้ `app/icon.svg` แล้ว re-render ไฟล์ `.ico`/`.png` ให้ตรงกัน
 
+**J. Carousel/สไลด์ที่กว้าง 100% ในคอลัมน์ของ CSS Grid จะล้นไปทับเนื้อหาข้าง ๆ**
+เพราะ grid item มี `min-width: auto` เป็นค่าเริ่มต้น จึงหดต่ำกว่า min-content ไม่ได้
+⇒ ใส่ `min-width: 0` ให้ทุกชั้น (คอลัมน์ → stage → track → slide) และอย่าวางปุ่มลูกศรลอยทับรูป
+⚠️ `tsc` และ `next build` จับบั๊กนี้ไม่ได้ ต้องเปิดดูหน้าจริงเท่านั้น
+
+**K. รูปที่เจ้าของเว็บส่งมาอาจเป็นคนละนามสกุลกัน** (ปกเป็น `.jpg` หน้าในเล่มเป็น `.png`)
+⇒ ใช้ `resolveAsset()` ใน `lib/assets.ts` ที่ลองนามสกุลให้เอง แทนการ hardcode
+⚠️ `lib/assets.ts` ใช้ `node:fs` → ห้าม client component import เข้าไป (ดูข้อ H)
+ให้ page ฝั่ง server resolve แล้วส่ง string ต่อเป็น prop
+
 ## เอกสารในโปรเจ็ค — อ่านอันไหนเมื่อไหร่
 
 | ไฟล์ | เนื้อหา |

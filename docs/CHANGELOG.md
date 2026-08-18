@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-08-18 — เปิดขาย E-Book "Oracle 26ai SQL Tuning" บนหน้า /products
+
+### สรุป
+
+หน้า `/products` เปลี่ยนจาก empty state "กำลังจะมาเร็ว ๆ นี้" เป็นหน้าขายจริง
+พร้อมหน้ารายละเอียดสินค้าใหม่ `/products/[slug]` และ carousel อ่านตัวอย่าง 15 หน้า
+
+### ไฟล์ที่เพิ่ม
+
+| ไฟล์ | ทำอะไร |
+| :--- | :--- |
+| `lib/assets.ts` | หาไฟล์รูปใต้ `/public` โดยลองนามสกุลให้เอง (`.png` → `.jpg` → `.jpeg` → `.webp`) — **server-only** เพราะใช้ `node:fs` |
+| `components/SampleCarousel.tsx` | `'use client'` — carousel อ่านตัวอย่าง: scroll-snap, ปุ่ม ←/→, แถบ thumbnail, คีย์บอร์ด, ขยายเต็มจอ |
+| `app/products/[slug]/page.tsx` | หน้ารายละเอียดสินค้า + `generateStaticParams` + JSON-LD `Product`/`Offer`/`BreadcrumbList` |
+| `public/images/products/oracle-26-ai-sql-tuning/` | ปก 1 + สารบัญ 9 + ผู้เขียน 1 + ตัวอย่างเนื้อหา 5 = 16 ไฟล์ (1.93 MB) |
+
+### ไฟล์ที่แก้
+
+- `lib/site.ts` — เพิ่ม type `Product` / `ProductSection` / `ProductSample`, array `products`, ฟังก์ชัน `getProduct()`
+  และตัด E-book ออกจาก `upcomingProducts` (เหลือ Online Course + Toolkit)
+- `app/products/page.tsx` — เขียนใหม่เป็น 2 โซน: "พร้อมจำหน่าย" (การ์ดปกเล็ก) กับ "กำลังจะมา" (ยังติด SOON)
+- `app/globals.css` — หมวด 17 (คลาสหน้าผลิตภัณฑ์ + carousel) แทรกไว้**ก่อน** บล็อก `prefers-reduced-motion`
+- `app/sitemap.ts` — เพิ่ม `/products/[slug]` อัตโนมัติจาก `products`
+- `app/llms.txt/route.ts` — เดิมเขียนว่า "ยังไม่เปิดขาย" เปลี่ยนเป็นรายการสินค้าจริงพร้อมราคา
+- `.env.example`, `public/images/README.txt`
+
+### การตัดสินใจที่ต้องรู้
+
+**ปุ่มสั่งซื้ออ่านจาก `NEXT_PUBLIC_STRIPE_LINK_ORACLE26`** — ไม่ตั้งค่า = ปุ่ม disable + ขึ้น "เปิดสั่งซื้อเร็ว ๆ นี้"
+และมีบรรทัดชี้ไป `/contact` ให้แทน · ใส่ค่าที่ Vercel แล้ว redeploy = ปุ่มทำงานทันที ไม่ต้องแก้โค้ด
+
+**ราคาโผล่ใน JSON-LD `Offer` (790 THB, InStock)** — Google อาจแสดงราคาในผลค้นหา (เจ้าของเว็บยืนยันแล้ว)
+
+**ปกเก็บเป็น `.jpg` แต่หน้าในเล่มเป็น `.png`** — ปกเป็นภาพถ่าย JPEG คุ้มกว่า (1003 KB → 201 KB)
+ส่วนหน้าหนังสือเป็นตัวอักษรบนพื้นขาว ใช้ PNG palette 64 สี คมเท่าเดิมแต่เล็กลง ~70%
+`lib/assets.ts` หานามสกุลให้เอง จึงปนกันได้โดยไม่ต้องแก้โค้ด
+
+### Gotcha ใหม่ที่เจอ (สำคัญ)
+
+**CSS Grid + carousel = เนื้อหาถูกทับ** — ต้นแบบแรกวาง carousel ไว้ในคอลัมน์ของ grid
+สไลด์ที่กว้าง `100%` ดันคอลัมน์จนล้นไปทับข้อความข้าง ๆ
+เพราะ grid item มี `min-width: auto` เป็นค่าเริ่มต้น จึงหดต่ำกว่า min-content ไม่ได้
+⇒ ทุกชั้นของ carousel ต้องมี `min-width: 0` และปุ่มลูกศรย้ายมาอยู่ **ใต้รูป** แทนการลอยทับ
+
+### การตรวจสอบ
+
+- `tsc --noEmit` ผ่าน
+- `next build` (Turbopack, production) ผ่าน — สำคัญเพราะเป็นตัวเดียวที่จับ gotcha ข้อ H (`node:fs` หลุดเข้า client bundle) ได้
+- `next start` แล้วถ่ายภาพหน้าจอจริงด้วย Playwright: desktop / mobile 390px / dark mode — ไม่มีส่วนไหนทับกัน
+- `/products/oracle-26-ai-sql-tuning` ถูก prerender เป็น static HTML และเข้า `sitemap.xml` แล้ว
+
+### ยังไม่ได้ทำ (คุยกันไว้ว่าแยกงาน)
+
+- หน้า `/lab` — ในคำนำหนังสือเขียนว่าดาวน์โหลดชุดแล็บได้ที่ `teedba.com/lab` แต่ route นี้ยังไม่มี (เจ้าของเว็บจะพิจารณาตัดออกจากหนังสือ เพราะแถมไฟล์ไปพร้อมเล่มอยู่แล้ว)
+- หน้า/ส่วน "ข้อแก้ไขและอัปเดต" (errata)
+
 ## 2026-07-26 — ชุดเอกสารครบ + ความสามารถฝังวิดีโอ/เสียง
 
 ### โค้ดที่เพิ่ม (ทำก่อนเขียนเอกสาร เพื่อไม่ให้เอกสารโกหก)

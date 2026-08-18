@@ -174,13 +174,174 @@ export const customerLogoSlots = Array.from({ length: 25 }, (_, i) => {
   return { id: `org-${n}`, image: `/images/customers/org-${n}.png` };
 });
 
-/** ผลิตภัณฑ์ที่วางแผนไว้ (ยังไม่วางขาย — หน้า /products เป็น empty state ตั้งใจ) */
-export const upcomingProducts = [
+/* ============================================================
+   ผลิตภัณฑ์ที่ "วางขายแล้ว"
+   ------------------------------------------------------------
+   ⚠️ ทุกค่าในนี้ต้องเป็นข้อมูลจริงที่เจ้าของเว็บยืนยันแล้ว
+      (ราคา / จำนวนหน้า / ชื่อผู้เขียน / คำโปรย — ห้ามกุเพิ่มเอง)
+   คำโปรยเรียบเรียงจากไฟล์ต้นฉบับ `03preface.md` ของหนังสือ
+   ============================================================ */
+
+/** ส่วนเนื้อหาในหน้ารายละเอียดสินค้า — ใช้ discriminated union เพื่อให้ TS ตรวจให้ครบทุกกรณี */
+export type ProductSection =
+  | { kind: 'paragraphs'; heading?: string; items: readonly string[] }
+  | { kind: 'bullets'; heading: string; items: readonly string[]; deny?: boolean }
+  | { kind: 'note'; heading?: string; text: string };
+
+/** รูปตัวอย่างในเล่ม 1 ใบ (file = ชื่อไฟล์ "ไม่ต้องใส่นามสกุล" ระบบหาให้เองทั้ง .png/.jpg/.webp) */
+export type ProductSample = {
+  group: string;
+  file: string;
+  alt: string;
+};
+
+export type Product = {
+  slug: string;
+  title: string;
+  subtitle: string;
+  /** ประเภทแบบเต็ม ใช้ในตารางสเปก */
+  kind: string;
+  /** ประเภทแบบสั้น ใช้บนการ์ด */
+  kindShort: string;
+  authorName: string;
+  price: number;
+  currency: 'THB';
+  pages: number;
+  language: string;
+  /** สิ่งที่ลูกค้าได้รับหลังชำระเงิน */
+  deliverables: readonly string[];
+  /** โฟลเดอร์รูปใต้ /public (ไม่มี / ปิดท้าย) */
+  imageDir: string;
+  /** ชื่อไฟล์ปก ไม่ต้องใส่นามสกุล */
+  coverFile: string;
+  /** คำโปรยสั้นบนการ์ดหน้า /products */
+  cardDesc: string;
+  /** คำอธิบายสำหรับ metadata/SEO */
+  metaDesc: string;
+  sections: readonly ProductSection[];
+  samples: readonly ProductSample[];
+  /**
+   * ลิงก์หน้าชำระเงิน — อ่านจาก environment variable
+   * ยังไม่ตั้งค่า = ปุ่มจะ disable อัตโนมัติ (ไม่มีปุ่มตายให้ลูกค้ากดแล้ว 404)
+   * ตั้งค่าที่ Vercel › Settings › Environment Variables แล้ว redeploy = ปุ่มทำงานทันที
+   */
+  buyUrl: string;
+};
+
+const ORACLE_26AI_DIR = '/images/products/oracle-26-ai-sql-tuning';
+
+export const products: readonly Product[] = [
   {
-    icon: '📘',
-    title: 'E-book: SQL Tuning ฉบับใช้งานจริง',
-    desc: 'รวมเทคนิคการจูน SQL ที่กลั่นจากประสบการณ์จริง อ่านจบแล้วนำไปใช้ได้ทันที',
+    slug: 'oracle-26-ai-sql-tuning',
+    title: 'Oracle 26ai SQL Tuning',
+    subtitle: 'จูน SQL ให้เร็วขึ้น อย่างเป็นขั้นตอน — เข้าใจหลักการ ครอบคลุมตั้งแต่เวอร์ชั่น 19c ถึง 26ai',
+    kind: 'E-Book (ไฟล์ PDF)',
+    kindShort: 'E-Book · PDF',
+    authorName: `${author.name} (${author.nickname})`,
+    price: 790,
+    currency: 'THB',
+    pages: 173,
+    language: 'ไทย',
+    deliverables: ['ไฟล์ PDF 173 หน้า', 'สคริปต์ติดตั้งสภาพแวดล้อมแล็บ (.zip)'],
+    imageDir: ORACLE_26AI_DIR,
+    coverFile: 'cover',
+    cardDesc: 'จูน SQL ให้เร็วขึ้นอย่างเป็นขั้นตอน ครอบคลุมตั้งแต่ 19c ถึง 26ai',
+    metaDesc:
+      'E-Book ภาษาไทย 173 หน้า ว่าด้วย SQL Tuning บน Oracle Database ครอบคลุม 19c ถึง 26ai — Cost-Based Optimizer, Execution Plan, Statistics, Index, Join, Hints, SQL Plan Management พร้อมเวิร์กช็อป 4 เคสจริง โดยอาจารย์ตี๋ (พรชัย ครองธรรมชาติ)',
+    sections: [
+      {
+        kind: 'paragraphs',
+        items: [
+          'เท่าที่ผมหาดู ตอนนี้ยังไม่มีหนังสือภาษาไทยเล่มไหนที่เขียนเรื่อง SQL Tuning บน Oracle เวอร์ชัน 26ai ออกมาเลย และถ้ามองภาพกว้างกว่านั้น คนที่ออกมาถ่ายทอดความรู้เรื่อง Oracle Database เป็นภาษาไทยก็แทบจะหาไม่เจอ',
+          'ผมไม่คิดว่าเป็นเพราะไม่มีคนเก่งนะครับ คนเก่งมีเยอะ แต่การนั่งเรียบเรียงองค์ความรู้ออกมาเป็นเล่มมันกินเวลามาก และคนที่เก่งพอจะเขียนได้มักจะยุ่งเกินกว่าจะมีเวลานั่งเขียน ผมเองก็เกือบไม่เขียนด้วยเหตุผลเดียวกัน',
+          'ผลที่ตามมาคือ DBA และ Developer ไทยจำนวนมากต้องไปงมเอาเองจาก Oracle Documentation ซึ่งเป็นภาษาอังกฤษล้วน อ่านได้อยู่ครับ แต่กว่าจะปะติดปะต่อว่าเรื่องไหนต่อกับเรื่องไหนก็เสียเวลาไปหลายเดือน',
+        ],
+      },
+      {
+        kind: 'paragraphs',
+        heading: 'เล่มนี้เขียนให้ใคร',
+        items: [
+          'ผมเขียนให้คนที่เจอสถานการณ์นี้ — ระบบเคยเร็ว อยู่ดี ๆ ก็ช้าลง พอเปิด query ขึ้นมาดูแล้วยังไม่รู้ว่าจะเริ่มแก้ตรงไหน',
+        ],
+      },
+      {
+        kind: 'bullets',
+        heading: '',
+        items: [
+          'DBA และ Developer ที่ทำงานกับ Oracle อยู่แล้ว',
+          'คนที่เรียนวิชาฐานข้อมูลมาแล้ว และอยากรู้ว่าหน้างานจริงเป็นยังไง',
+        ],
+      },
+      {
+        kind: 'bullets',
+        heading: 'พื้นฐานที่ต้องมี',
+        items: [
+          'เขียน SQL ได้ และอ่าน SELECT ที่มี join หลายตารางแล้วเข้าใจ',
+          'เคยใช้ SQL*Plus หรือ SQLcl มาบ้าง',
+        ],
+      },
+      {
+        kind: 'note',
+        text: 'ส่วน optimizer, execution plan และ statistics ไม่ต้องรู้มาก่อน เดี๋ยวผมสอนให้',
+      },
+      {
+        kind: 'paragraphs',
+        heading: 'ขอบเขตของเล่มนี้',
+        items: [
+          'เล่มนี้จูนที่ระดับคำสั่ง SQL เท่านั้น สิ่งที่ไม่อยู่ในเล่ม คือเรื่องที่ไม่ได้อยู่ในมือของโปรแกรมเมอร์:',
+        ],
+      },
+      {
+        kind: 'bullets',
+        heading: '',
+        deny: true,
+        items: [
+          'Instance tuning (การปรับ SGA/PGA ระดับ instance)',
+          'System tuning (OS, storage, network)',
+          'PL/SQL tuning',
+        ],
+      },
+      {
+        kind: 'paragraphs',
+        heading: 'วิธีอ่านให้ได้ผล',
+        items: [
+          'อย่าอ่านอย่างเดียวครับ ติดตั้งแล็บแล้วรันตามไปด้วยทุกบท — ชุดติดตั้งแล็บแถมมาให้พร้อมกับหนังสือ ไม่ต้องไปหาที่อื่น',
+        ],
+      },
+      {
+        kind: 'note',
+        heading: 'ในเล่มมีอะไรบ้าง',
+        text:
+          '10 บท + 2 ภาคผนวก — สถาปัตยกรรมการประมวลผลคำสั่ง SQL และ Cost-Based Optimizer · การอ่านและตีความ Execution Plan · Optimizer Statistics และ Histogram · การหา SQL ที่มาจากแอปพลิเคชัน (SQL Trace / TRCSESS / TKPROF) · การเข้าถึงข้อมูลและดัชนี · การเชื่อมโยงข้อมูลและการเรียงลำดับ · Optimizer Hints, Query Transformation และ Materialized View · Bind Variables และ Adaptive Execution · ทำให้เสถียรด้วยระบบอัตโนมัติ (AWR/ASH, SQL Plan Management, Automatic Indexing) · เวิร์กช็อปรวบยอด 4 เคสจริง · ภาคผนวก ก คำสั่งใหม่ (QUALIFY, GROUP BY ALL, VALUES) · ภาคผนวก ข Vector และ JSON Relational Duality',
+      },
+    ],
+    samples: [
+      { group: 'สารบัญ', file: 'toc-01', alt: 'สารบัญ หน้า i' },
+      { group: 'สารบัญ', file: 'toc-02', alt: 'สารบัญ หน้า ii' },
+      { group: 'สารบัญ', file: 'toc-03', alt: 'สารบัญ หน้า iii' },
+      { group: 'สารบัญ', file: 'toc-04', alt: 'สารบัญ หน้า iv' },
+      { group: 'สารบัญ', file: 'toc-05', alt: 'สารบัญ หน้า v' },
+      { group: 'สารบัญ', file: 'toc-06', alt: 'สารบัญ หน้า vi' },
+      { group: 'สารบัญ', file: 'toc-07', alt: 'สารบัญ หน้า vii' },
+      { group: 'สารบัญ', file: 'toc-08', alt: 'สารบัญ หน้า viii' },
+      { group: 'สารบัญ', file: 'toc-09', alt: 'สารบัญ หน้า ix' },
+      { group: 'เกี่ยวกับผู้เขียน', file: 'author', alt: 'หน้าเกี่ยวกับผู้เขียน' },
+      { group: 'ตัวอย่างเนื้อหา', file: 'sample-01', alt: 'ตัวอย่างเนื้อหา — บทที่ 1 หน้าเปิดบท' },
+      { group: 'ตัวอย่างเนื้อหา', file: 'sample-02', alt: 'ตัวอย่างเนื้อหา — 1.1 วงจรชีวิตของคำสั่ง SQL' },
+      { group: 'ตัวอย่างเนื้อหา', file: 'sample-03', alt: 'ตัวอย่างเนื้อหา — 1.2 Hard Parse กับ Soft Parse' },
+      { group: 'ตัวอย่างเนื้อหา', file: 'sample-04', alt: 'ตัวอย่างเนื้อหา — ผลรันจริงจาก v$sql' },
+      { group: 'ตัวอย่างเนื้อหา', file: 'sample-05', alt: 'ตัวอย่างเนื้อหา — ดูตัวเลขรวมของ session' },
+    ],
+    buyUrl: process.env.NEXT_PUBLIC_STRIPE_LINK_ORACLE26 ?? '',
   },
+];
+
+export function getProduct(slug: string): Product | undefined {
+  return products.find((p) => p.slug === slug);
+}
+
+/** ผลิตภัณฑ์ที่ยังไม่วางขาย — แสดงในโซน "กำลังจะมา" ของหน้า /products */
+export const upcomingProducts = [
   {
     icon: '🎥',
     title: 'Online Course: Oracle DBA พื้นฐานถึงใช้งาน',
