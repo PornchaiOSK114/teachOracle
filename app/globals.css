@@ -1723,6 +1723,38 @@ pre::-webkit-scrollbar-thumb {
   font-size: 15px;
   line-height: 1.6;
 }
+.promo-steps {
+  counter-reset: promo-step;
+  list-style: none;
+  margin: 18px 0 4px;
+  padding: 0;
+  text-align: left;
+  display: grid;
+  gap: 11px;
+}
+.promo-steps li {
+  counter-increment: promo-step;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.promo-steps li::before {
+  content: counter(promo-step);
+  flex: 0 0 auto;
+  width: 23px;
+  height: 23px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
 .promo-warning {
   margin: 16px 0;
   padding: 13px 16px;
@@ -1743,6 +1775,14 @@ pre::-webkit-scrollbar-thumb {
 .promo-btn {
   width: 100%;
   max-width: 320px;
+}
+.promo-fallback {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+}
+.promo-fallback a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .promo-hint {
   margin: 12px 0 0;

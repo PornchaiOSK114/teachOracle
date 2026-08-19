@@ -79,7 +79,7 @@ export default async function ProductDetailPage({
 
   const canBuy = product.buyUrl.length > 0;
   const promo = isPromoOpen(product.promo) ? product.promo : null;
-  const promoOpen = promo !== null && promo.formUrl.length > 0;
+  const promoOpen = promo !== null && promo.orderUrl.length > 0;
 
   return (
     <section className="container-prose section" style={{ maxWidth: 860 }}>
@@ -144,22 +144,34 @@ export default async function ProductDetailPage({
           <p className="promo-line">{promo.deadlineLabel}</p>
           <p className="promo-line">{promo.deliverNote}</p>
 
+          <ol className="promo-steps">
+            {promo.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+
           <p className="promo-warning">{promo.warning}</p>
 
           {promoOpen ? (
             <a
               className="btn btn-primary promo-btn"
-              href={promo.formUrl}
+              href={promo.orderUrl}
               rel="noopener nofollow"
               target="_blank"
             >
-              สั่งซื้อราคาศิษย์เก่า
+              {promo.buttonLabel}
             </a>
           ) : (
             <button className="btn btn-primary promo-btn" type="button" disabled>
               กำลังเปิดรับเร็ว ๆ นี้
             </button>
           )}
+
+          <p className="promo-fallback">
+            <a href={promo.fallbackUrl} rel="noopener nofollow" target="_blank">
+              {promo.fallbackLabel}
+            </a>
+          </p>
 
           <p className="promo-hint muted">{promo.codeHint}</p>
         </aside>
