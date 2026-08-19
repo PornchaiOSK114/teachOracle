@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  /* ชุดสีเดียวกับ teedba.com เพื่อให้ลูกค้ารู้สึกว่ายังอยู่ในเว็บเดิม */
+  :root{
+    --bg:#eceff4; --surface:#fff; --surface-2:#e2e7ef; --text:#131820; --muted:#586170;
+    --border:#d8dee7; --accent:#b23a2b; --accent-2:#d1543f; --accent-soft:#f4e5e1;
+    --danger:#c0392b; --ok:#1e7a4d;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(20,23,28,.05), 0 10px 30px -14px rgba(30,41,59,.22);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:24px 16px 56px;
+    font-family:'IBM Plex Sans Thai',system-ui,sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:520px;margin:0 auto}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:26px 22px; box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  .badge{
+    display:inline-block; padding:5px 14px; border-radius:999px;
+    background:var(--accent); color:#fff; font-size:13px; font-weight:700; margin-bottom:14px;
+  }
+  h1{font-size:22px; margin:0 0 6px; letter-spacing:-.02em}
+  h2{font-size:18px; margin:0 0 14px; letter-spacing:-.02em}
+  .sub{color:var(--muted); font-size:14.5px; margin:0 0 4px}
+  .price{font-family:'IBM Plex Mono',monospace; font-size:38px; font-weight:600; color:var(--accent); line-height:1.1}
+  .was{font-size:17px; color:var(--muted); text-decoration:line-through; margin-left:8px}
+  .warn{
+    border:1px solid var(--danger); background:rgba(192,57,43,.07); color:#a5271b;
+    border-radius:11px; padding:13px 15px; font-size:14.5px; font-weight:600; margin:18px 0;
+  }
+  label{display:block; font-weight:600; font-size:15px; margin:18px 0 6px}
+  label .req{color:var(--danger)}
+  .hint{font-weight:400; color:var(--muted); font-size:13.5px; margin-top:2px}
+  input[type=text], input[type=email]{
+    width:100%; padding:13px 14px; font:inherit; font-size:16px;
+    border:1px solid var(--border); border-radius:11px; background:#fff; color:var(--text);
+  }
+  input:focus{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent)}
+  .file-btn{
+    display:block; width:100%; padding:22px 14px; text-align:center; cursor:pointer;
+    border:2px dashed var(--border); border-radius:11px; background:var(--surface-2);
+    color:var(--muted); font-size:14.5px; font-weight:600;
+  }
+  .file-btn:hover{border-color:var(--accent); color:var(--accent)}
+  .file-btn.has-file{border-style:solid; border-color:var(--ok); color:var(--ok); background:rgba(30,122,77,.06)}
+  input[type=file]{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
+  .btn{
+    display:block; width:100%; margin-top:22px; padding:15px; font:inherit; font-size:16px; font-weight:700;
+    border:0; border-radius:11px; background:var(--accent); color:#fff; cursor:pointer;
+  }
+  .btn:hover{background:var(--accent-2)}
+  .btn:disabled{opacity:.55; cursor:not-allowed}
+  .err{color:var(--danger); font-size:14.5px; font-weight:600; margin-top:14px; display:none}
+  .err.show{display:block}
+  .qr{display:block; width:min(260px,80%); margin:6px auto 4px; border-radius:11px}
+  .qr-box{text-align:center; background:var(--surface-2); border-radius:11px; padding:16px; margin-bottom:6px}
+  .steps{color:var(--muted); font-size:13.5px; margin:0 0 18px}
+  .foot{text-align:center; color:var(--muted); font-size:13px; margin-top:6px}
+  .foot a{color:var(--accent)}
+  ol.done-list{padding-left:20px; margin:12px 0 0}
+  ol.done-list li{margin-bottom:8px}
+  .hp{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden}
+  .spinner{display:inline-block; width:15px; height:15px; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){.spinner{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<? if (closed) { ?>
+  <div class="card">
+    <h1>โปรโมชันปิดรับแล้ว</h1>
+    <p class="sub">ขอบคุณที่สนใจครับ โปรราคาศิษย์เก่าปิดรับไปแล้ว</p>
+    <p class="sub">สั่งซื้อในราคาปกติได้ที่ <a href="<?= siteUrl ?>/products"><?= siteUrl ?>/products</a> ได้ไฟล์เหมือนกันทุกอย่าง</p>
+  </div>
+<? } else { ?>
+
+  <!-- ขั้นที่ 1 ตรวจรหัส -->
+  <div class="card" id="step1">
+    <span class="badge">ราคาพิเศษสำหรับศิษย์เก่า</span>
+    <h1><?= bookTitle ?></h1>
+    <p class="sub">E-Book ไฟล์ PDF 173 หน้า พร้อมสคริปต์ติดตั้งแล็บ</p>
+    <div style="margin:14px 0 4px">
+      <span class="price">฿490</span><span class="was">฿790</span>
+    </div>
+    <p class="steps">ส่งไฟล์ทางอีเมลตั้งแต่วันที่ <?= deliverDate ?> เป็นต้นไป</p>
+
+    <label for="email">อีเมลของคุณ <span class="req">*</span>
+      <span class="hint">ผมส่งไฟล์หนังสือไปที่อีเมลนี้ทางเดียว</span>
+    </label>
+    <input type="email" id="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+
+    <div class="warn">
+      ตรวจอีเมลให้ถูกต้องก่อนกดต่อไป ถ้าพิมพ์ผิดผมจะส่งไฟล์ไปหาคุณไม่ได้
+      และถ้าไม่ได้รับอีเมล ให้ดูในกล่อง Spam หรือ Junk ก่อน
+    </div>
+
+    <label for="code">รหัสศิษย์เก่า <span class="req">*</span>
+      <span class="hint">รหัสที่ผมให้ไว้ในห้องอบรม</span>
+    </label>
+    <input type="text" id="code" autocomplete="off" autocapitalize="characters" placeholder="กรอกรหัส">
+
+    <div class="hp"><label>Website<input type="text" id="website" tabindex="-1" autocomplete="off"></label></div>
+
+    <button class="btn" id="btn1" type="button">ถัดไป</button>
+    <p class="err" id="err1"></p>
+  </div>
+
+  <!-- ขั้นที่ 2 โอนเงินและแนบสลิป -->
+  <div class="card" id="step2" style="display:none">
+    <h2>โอนเงิน 490 บาท</h2>
+    <p class="sub">สแกน QR ด้านล่าง ยอดล็อกไว้แล้วไม่ต้องพิมพ์เอง</p>
+
+    <div class="qr-box">
+      <? if (qrUrl) { ?>
+        <img class="qr" src="<?= qrUrl ?>" alt="QR พร้อมเพย์ 490 บาท">
+      <? } else { ?>
+        <p class="sub" style="margin:0">ยังไม่ได้วางรูป QR ในระบบ รบกวนทักมาที่เพจเพื่อขอ QR ครับ</p>
+      <? } ?>
+      <p class="sub" style="margin:8px 0 0"><strong>พร้อมเพย์ 490.00 บาท</strong></p>
+    </div>
+
+    <label for="name">ชื่อ-นามสกุลผู้โอน <span class="req">*</span>
+      <span class="hint">ชื่อที่ปรากฏในสลิป</span>
+    </label>
+    <input type="text" id="name" autocomplete="name">
+
+    <label for="transferAt">วันและเวลาที่โอน <span class="req">*</span>
+      <span class="hint">เช่น 25 ส.ค. 21:35</span>
+    </label>
+    <input type="text" id="transferAt" autocomplete="off" placeholder="25 ส.ค. 21:35">
+
+    <label for="slip">สลิปการโอน <span class="req">*</span>
+      <span class="hint">รูปถ่ายหรือแคปหน้าจอจากแอปธนาคาร</span>
+    </label>
+    <label class="file-btn" id="slipLabel" for="slip">แตะเพื่อเลือกรูปสลิป</label>
+    <input type="file" id="slip" accept="image/*,application/pdf">
+
+    <button class="btn" id="btn2" type="button">ส่งข้อมูลสั่งซื้อ</button>
+    <p class="err" id="err2"></p>
+    <p class="foot" style="margin-top:16px">ติดขัดตรงไหน ทักมาที่เพจ อาจารย์ตี๋ที่สอน Oracle ได้เลยครับ</p>
+  </div>
+
+  <!-- ขั้นที่ 3 เสร็จแล้ว -->
+  <div class="card" id="step3" style="display:none">
+    <h1>ได้รับข้อมูลของคุณแล้วครับ</h1>
+    <ol class="done-list">
+      <li>ผมส่งอีเมลยืนยันไปที่อีเมลที่คุณกรอกไว้แล้ว ถ้าไม่เห็นในกล่องขาเข้า ให้ดูในกล่อง Spam หรือ Junk ก่อน</li>
+      <li>ผมจะตรวจสอบยอดโอน แล้วส่งไฟล์หนังสือไปที่อีเมลนั้น ตั้งแต่วันที่ <?= deliverDate ?> เป็นต้นไป</li>
+      <li>ถ้าเลยวันดังกล่าวแล้วยังไม่ได้รับ ทักมาที่เพจได้เลยครับ</li>
+    </ol>
+    <p class="foot" style="margin-top:20px"><a href="<?= siteUrl ?>">กลับไปที่ <?= siteUrl ?></a></p>
+  </div>
+
+<? } ?>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  if (!$('step1')) return;
+
+  var slipData = null;
+
+  function showErr(el, msg) { el.textContent = msg; el.className = 'err show'; }
+  function clearErr(el) { el.textContent = ''; el.className = 'err'; }
+  function busy(btn, on, label) {
+    btn.disabled = on;
+    btn.innerHTML = on ? '<span class="spinner"></span>กำลังส่ง' : label;
+  }
+
+  /* ---------- ขั้นที่ 1 ---------- */
+  $('btn1').addEventListener('click', function () {
+    clearErr($('err1'));
+    var email = $('email').value.trim();
+    var code = $('code').value.trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return showErr($('err1'), 'อีเมลไม่ถูกต้อง ตรวจอีกครั้งนะครับ');
+    }
+    if (!code) return showErr($('err1'), 'กรุณากรอกรหัสศิษย์เก่า');
+
+    busy($('btn1'), true, 'ถัดไป');
+    google.script.run
+      .withSuccessHandler(function (res) {
+        busy($('btn1'), false, 'ถัดไป');
+        if (!res.ok) return showErr($('err1'), res.message);
+        $('step1').style.display = 'none';
+        $('step2').style.display = '';
+        window.scrollTo(0, 0);
+      })
+      .withFailureHandler(function (err) {
+        busy($('btn1'), false, 'ถัดไป');
+        showErr($('err1'), 'เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้งครับ');
+        console.error(err);
+      })
+      .checkCode(code);
+  });
+
+  /* ---------- เลือกไฟล์สลิป ---------- */
+  $('slip').addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    clearErr($('err2'));
+    if (!file) return;
+
+    if (file.size > 20 * 1024 * 1024) {
+      return showErr($('err2'), 'ไฟล์ใหญ่เกินไป รบกวนถ่ายใหม่ครับ');
+    }
+
+    $('slipLabel').textContent = 'กำลังเตรียมไฟล์';
+
+    prepareFile(file)
+      .then(function (out) {
+        slipData = out;
+        $('slipLabel').textContent = 'แนบสลิปแล้ว (แตะเพื่อเปลี่ยนรูป)';
+        $('slipLabel').className = 'file-btn has-file';
+      })
+      .catch(function (err) {
+        console.error(err);
+        slipData = null;
+        $('slipLabel').textContent = 'แตะเพื่อเลือกรูปสลิป';
+        $('slipLabel').className = 'file-btn';
+        showErr($('err2'), 'อ่านไฟล์ไม่สำเร็จ ลองเลือกรูปใหม่ครับ');
+      });
+  });
+
+  /**
+   * ย่อรูปในเครื่องลูกค้าก่อนส่ง
+   * รูปจากมือถือมักใหญ่ 3-5 MB ย่อแล้วเหลือไม่ถึง 300 KB
+   * อัปเร็วขึ้นมากบนเน็ตมือถือ และไม่ชนเพดานขนาดข้อมูลของ Apps Script
+   * ไฟล์ PDF ย่อไม่ได้ ส่งไปตามเดิม
+   */
+  function prepareFile(file) {
+    if (file.type === 'application/pdf') {
+      return readAsBase64(file).then(function (b64) {
+        return { data: b64, type: 'application/pdf' };
+      });
+    }
+    return shrinkImage(file, 1600, 0.85);
+  }
+
+  function readAsBase64(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(String(r.result).split(',')[1]); };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function shrinkImage(file, maxDim, quality) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = function () {
+        var img = new Image();
+        img.onerror = function () {
+          // เบราว์เซอร์เปิดรูปนี้ไม่ได้ (เช่น HEIC บางรุ่น) ส่งไฟล์ดิบไปเลย
+          readAsBase64(file).then(function (b64) {
+            resolve({ data: b64, type: file.type || 'image/jpeg' });
+          }).catch(reject);
+        };
+        img.onload = function () {
+          var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          var url = canvas.toDataURL('image/jpeg', quality);
+          resolve({ data: url.split(',')[1], type: 'image/jpeg' });
+        };
+        img.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /* ---------- ขั้นที่ 2 ---------- */
+  $('btn2').addEventListener('click', function () {
+    clearErr($('err2'));
+    var name = $('name').value.trim();
+    var transferAt = $('transferAt').value.trim();
+
+    if (name.length < 2) return showErr($('err2'), 'กรุณากรอกชื่อผู้โอน');
+    if (transferAt.length < 2) return showErr($('err2'), 'กรุณากรอกวันและเวลาที่โอน');
+    if (!slipData) return showErr($('err2'), 'กรุณาแนบสลิปการโอน');
+
+    busy($('btn2'), true, 'ส่งข้อมูลสั่งซื้อ');
+    google.script.run
+      .withSuccessHandler(function (res) {
+        busy($('btn2'), false, 'ส่งข้อมูลสั่งซื้อ');
+        if (!res.ok) return showErr($('err2'), res.message);
+        $('step2').style.display = 'none';
+        $('step3').style.display = '';
+        window.scrollTo(0, 0);
+      })
+      .withFailureHandler(function (err) {
+        busy($('btn2'), false, 'ส่งข้อมูลสั่งซื้อ');
+        showErr($('err2'), 'ส่งไม่สำเร็จ ลองใหม่อีกครั้ง หรือทักมาที่เพจได้ครับ');
+        console.error(err);
+      })
+      .submitOrder({
+        email: $('email').value.trim(),
+        code: $('code').value.trim(),
+        name: name,
+        transferAt: transferAt,
+        fileData: slipData.data,
+        fileType: slipData.type,
+        website: $('website').value
+      });
+  });
+})();
+</script>
+</body>
+</html>

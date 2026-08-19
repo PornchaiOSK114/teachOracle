@@ -2,8 +2,13 @@
  * ระบบส่ง E-Book อัตโนมัติ — โปรราคาศิษย์เก่า Oracle 26ai SQL Tuning
  * ==================================================================
  *
+ * ใช้ได้ทั้งสองแบบ
+ *   ก. ลูกค้าทัก Facebook แล้วคุณพิมพ์ข้อมูลลงชีตเอง  (แบบที่ใช้อยู่ตอนนี้)
+ *   ข. ลูกค้ากรอก Google Form แล้วคำตอบไหลลงชีตเอง   (ถ้าเปิดฟอร์มเพิ่มทีหลัง)
+ * สคริปต์อ่านข้อมูลจาก "ชีต" ไม่ได้อ่านจากฟอร์ม จึงไม่สนว่าแถวนั้นมาจากทางไหน
+ *
  * วิธีติดตั้ง (ทำครั้งเดียว)
- *   1. เปิด Google Sheet ที่รับคำตอบจากฟอร์ม
+ *   1. เปิด Google Sheet ที่ใช้เก็บออเดอร์ (สร้างชีตเปล่าใหม่ก็ได้)
  *   2. เมนู Extensions > Apps Script
  *   3. ลบโค้ดเดิมทิ้ง วางไฟล์นี้ลงไปทั้งหมด แล้วกด Save
  *   4. เลือกฟังก์ชัน setupOnce จาก dropdown ด้านบน แล้วกด Run
@@ -19,6 +24,8 @@
  *   - Gmail ธรรมดาส่งได้ 100 ฉบับต่อวัน (Google One ไม่ได้เพิ่มโควตาส่วนนี้)
  *   - ไฟล์แนบรวมกันต้องไม่เกิน 25 MB
  *   - สคริปต์กันการส่งซ้ำให้แล้ว พิมพ์ OK ซ้ำก็ไม่ส่งซ้ำ
+ *   - FOLDER_ID ต้องเป็นคนละโฟลเดอร์กับที่ฟอร์มเก็บสลิปที่ลูกค้าอัปโหลด
+ *     ไม่งั้นสลิปของลูกค้าจะถูกแนบส่งไปให้ลูกค้าคนอื่นด้วย
  */
 
 // ==================== ตั้งค่า ====================
@@ -42,6 +49,7 @@ var CONFIG = {
   COL_EMAIL: 'อีเมลของคุณ',
   COL_NAME: 'ชื่อ-นามสกุลผู้โอน',
   COL_TRANSFER_AT: 'วันและเวลาที่โอน',
+  COL_SLIP: 'สลิปการโอน',
 
   /** คอลัมน์ที่สคริปต์สร้างเพิ่มให้เอง */
   COL_APPROVE: 'อนุมัติ',
@@ -65,6 +73,10 @@ function onOpen() {
     .addItem('ส่งอีเมลทดสอบมาหาตัวเอง', 'previewEmailToSelf')
     .addItem('เช็คโควตาส่งอีเมลที่เหลือวันนี้', 'showQuota')
     .addSeparator()
+    .addItem('ตั้งรหัสศิษย์เก่า', 'setAlumniCode')
+    .addItem('ดูลิงก์ฟอร์มที่ deploy ไว้', 'showWebAppUrl')
+    .addItem('เปิดโฟลเดอร์เก็บสลิป', 'showSlipFolder')
+    .addSeparator()
     .addItem('ติดตั้งระบบ (ทำครั้งเดียว)', 'setupOnce')
     .addToUi();
 }
@@ -75,6 +87,7 @@ function setupOnce() {
   var sheet = getResponseSheet_();
   ensureColumns_(sheet);
   installTriggers_();
+  formatSheet_(sheet);
 
   var files = getAttachments_();
   var names = files
@@ -83,25 +96,62 @@ function setupOnce() {
     })
     .join(', ');
 
+  var mode = SpreadsheetApp.getActiveSpreadsheet().getFormUrl()
+    ? 'โหมดผูกกับ Google Form'
+    : 'โหมดกรอกมือ (รับออเดอร์ทาง Facebook)';
+
   SpreadsheetApp.getUi().alert(
     'ติดตั้งเรียบร้อย\n\n' +
+      mode + '\n\n' +
       'ไฟล์ที่จะแนบไปกับอีเมล (' + files.length + ' ไฟล์)\n' + (names || '(ยังไม่มีไฟล์ในโฟลเดอร์)') + '\n\n' +
       'วิธีใช้: พิมพ์ ' + CONFIG.APPROVE_WORD + ' ในคอลัมน์ "' + CONFIG.COL_APPROVE + '" ของแถวที่เงินเข้าแล้ว'
   );
 }
 
-/** เพิ่มคอลัมน์ที่ยังไม่มี ต่อท้ายหัวตาราง */
+/**
+ * เพิ่มคอลัมน์ที่ยังไม่มี
+ * ถ้าชีตยังว่างเปล่า (กรณีรับออเดอร์ทาง Facebook ไม่ได้ผูกกับฟอร์ม)
+ * จะสร้างหัวตารางให้ครบทุกคอลัมน์ตั้งแต่ต้น
+ */
 function ensureColumns_(sheet) {
-  var headers = getHeaders_(sheet);
-  var wanted = [CONFIG.COL_APPROVE, CONFIG.COL_STATUS, CONFIG.COL_SENT_AT];
+  var headers = getHeaders_(sheet).filter(function (h) {
+    return h !== '';
+  });
 
-  wanted.forEach(function (name) {
+  // ชีตเปล่า = สร้างหัวตารางเต็มชุดสำหรับกรอกมือ
+  if (headers.length === 0) {
+    var full = [
+      'วันที่รับออเดอร์',
+      CONFIG.COL_EMAIL,
+      CONFIG.COL_NAME,
+      CONFIG.COL_TRANSFER_AT,
+      CONFIG.COL_SLIP,
+      CONFIG.COL_APPROVE,
+      CONFIG.COL_STATUS,
+      CONFIG.COL_SENT_AT,
+    ];
+    sheet.getRange(1, 1, 1, full.length).setValues([full]).setFontWeight('bold');
+    return;
+  }
+
+  // ชีตมีข้อมูลอยู่แล้ว (เช่นมาจากฟอร์ม) = เติมเฉพาะคอลัมน์ที่ขาด
+  [CONFIG.COL_APPROVE, CONFIG.COL_STATUS, CONFIG.COL_SENT_AT].forEach(function (name) {
     if (headers.indexOf(name) === -1) {
       var col = sheet.getLastColumn() + 1;
       sheet.getRange(1, col).setValue(name).setFontWeight('bold');
       headers.push(name);
     }
   });
+}
+
+/** ตรึงหัวตารางไว้ให้เลื่อนแล้วยังเห็น และขยายความกว้างคอลัมน์ */
+function formatSheet_(sheet) {
+  try {
+    sheet.setFrozenRows(1);
+    for (var c = 1; c <= sheet.getLastColumn(); c++) sheet.autoResizeColumn(c);
+  } catch (ignored) {
+    // จัดรูปแบบไม่สำเร็จไม่ใช่เรื่องคอขาดบาดตาย ปล่อยผ่าน
+  }
 }
 
 /** ติดตั้ง trigger แบบ installable (แบบธรรมดาส่งอีเมลไม่ได้) */
@@ -116,11 +166,14 @@ function installTriggers_() {
     }
   });
 
-  ScriptApp.newTrigger('handleFormSubmit').forSpreadsheet(ss).onFormSubmit().create();
+  // ตัวนี้ต้องมีเสมอ เพราะเป็นตัวที่คอยดูว่าพิมพ์ OK แล้วหรือยัง
   ScriptApp.newTrigger('handleEdit').forSpreadsheet(ss).onEdit().create();
 
-  // เช็คทุกชั่วโมงว่าถึงเวลาปิดรับหรือยัง จะได้ไม่ต้องมานั่งกดปิดเอง
-  ScriptApp.newTrigger('closeFormIfPastDeadline').timeBased().everyHours(1).create();
+  // สองตัวนี้ใช้เฉพาะตอนผูกกับ Google Form ถ้ารับออเดอร์ทาง Facebook อย่างเดียวก็ไม่ต้องมี
+  if (ss.getFormUrl()) {
+    ScriptApp.newTrigger('handleFormSubmit').forSpreadsheet(ss).onFormSubmit().create();
+    ScriptApp.newTrigger('closeFormIfPastDeadline').timeBased().everyHours(1).create();
+  }
 }
 
 /** ปิดรับคำตอบอัตโนมัติเมื่อพ้นกำหนด แล้วส่งเมลแจ้งเจ้าของ */
@@ -153,9 +206,10 @@ function handleFormSubmit(e) {
     var email = firstValue_(values[CONFIG.COL_EMAIL]);
     var name = firstValue_(values[CONFIG.COL_NAME]);
     var transferAt = firstValue_(values[CONFIG.COL_TRANSFER_AT]);
+    var slip = firstValue_(values[CONFIG.COL_SLIP]);
 
     if (email) sendAckEmail_(email, name);
-    notifyOwner_(email, name, transferAt);
+    notifyOwner_(email, name, transferAt, slip);
   } catch (err) {
     // ไม่ throw ต่อ เพราะถ้า trigger พังจะไม่มีใครเห็น ให้บันทึกไว้ใน log แทน
     console.error('handleFormSubmit ล้มเหลว: ' + err);
@@ -186,14 +240,16 @@ function sendAckEmail_(email, name) {
 }
 
 /** แจ้งเตือนเจ้าของร้าน */
-function notifyOwner_(email, name, transferAt) {
+function notifyOwner_(email, name, transferAt, slip) {
   var url = SpreadsheetApp.getActiveSpreadsheet().getUrl();
   var body =
     'มีออเดอร์ใหม่\n\n' +
     'อีเมลลูกค้า: ' + (email || '-') + '\n' +
     'ชื่อผู้โอน: ' + (name || '-') + '\n' +
-    'เวลาที่แจ้งว่าโอน: ' + (transferAt || '-') + '\n\n' +
-    'เช็คยอดในแอปธนาคาร แล้วพิมพ์ ' + CONFIG.APPROVE_WORD + ' ในคอลัมน์ "' + CONFIG.COL_APPROVE + '"\n' +
+    'เวลาที่แจ้งว่าโอน: ' + (transferAt || '-') + '\n' +
+    'สลิป: ' + (slip || '(ไม่ได้แนบ)') + '\n\n' +
+    'เปิดสลิปเทียบกับยอดในแอปธนาคาร แล้วพิมพ์ ' + CONFIG.APPROVE_WORD +
+    ' ในคอลัมน์ "' + CONFIG.COL_APPROVE + '"\n' +
     url;
 
   GmailApp.sendEmail(CONFIG.OWNER_EMAIL, '[ออเดอร์ใหม่] ' + (name || email || 'ไม่ระบุชื่อ'), body, {
@@ -356,10 +412,19 @@ function getHeaders_(sheet) {
     });
 }
 
+/**
+ * ไฟล์ทุกไฟล์ในโฟลเดอร์จะถูกแนบไปกับอีเมล ยกเว้นรูป QR
+ * เพราะ QR วางไว้โฟลเดอร์เดียวกันเพื่อให้ฟอร์มหยิบไปแสดง
+ * ถ้าไม่กรองออก ลูกค้าทุกคนจะได้ QR พร้อมเพย์ของเราแนบไปด้วย
+ */
 function getAttachments_() {
   var out = [];
   var it = DriveApp.getFolderById(CONFIG.FOLDER_ID).getFiles();
-  while (it.hasNext()) out.push(it.next());
+  while (it.hasNext()) {
+    var f = it.next();
+    if (/^QR\./i.test(f.getName())) continue;
+    out.push(f);
+  }
   return out;
 }
 
