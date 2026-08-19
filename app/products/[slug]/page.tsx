@@ -5,9 +5,15 @@ import AssetImage from '@/components/AssetImage';
 import JsonLd from '@/components/JsonLd';
 import SampleCarousel, { type CarouselSlide } from '@/components/SampleCarousel';
 import { resolveAsset } from '@/lib/assets';
-import { products, getProduct, site, author } from '@/lib/site';
+import { products, getProduct, isPromoOpen, site, author } from '@/lib/site';
 
 const priceFormatter = new Intl.NumberFormat('th-TH');
+
+/**
+ * สร้างหน้าใหม่ทุก 15 นาที เพื่อให้กล่องโปรโมชันหายไปเองเมื่อหมดเวลา
+ * โดยไม่ต้องกลับมา deploy ใหม่
+ */
+export const revalidate = 900;
 
 /** สร้างหน้าแบบ static ตอน build ครบทุกสินค้า */
 export function generateStaticParams() {
@@ -72,6 +78,8 @@ export default async function ProductDetailPage({
     .filter((s): s is CarouselSlide => s !== null);
 
   const canBuy = product.buyUrl.length > 0;
+  const promo = isPromoOpen(product.promo) ? product.promo : null;
+  const promoOpen = promo !== null && promo.formUrl.length > 0;
 
   return (
     <section className="container-prose section" style={{ maxWidth: 860 }}>
@@ -122,6 +130,40 @@ export default async function ProductDetailPage({
           </span>
         </div>
       </div>
+
+      {/* 2.5 · โปรโมชันราคาศิษย์เก่า — หายไปเองเมื่อพ้นกำหนด */}
+      {promo && (
+        <aside className="promo-box">
+          <span className="promo-badge">{promo.label}</span>
+
+          <div className="promo-price-row">
+            <span className="promo-price mono">฿{priceFormatter.format(promo.price)}</span>
+            <span className="promo-was mono">฿{priceText}</span>
+          </div>
+
+          <p className="promo-line">{promo.deadlineLabel}</p>
+          <p className="promo-line">{promo.deliverNote}</p>
+
+          <p className="promo-warning">{promo.warning}</p>
+
+          {promoOpen ? (
+            <a
+              className="btn btn-primary promo-btn"
+              href={promo.formUrl}
+              rel="noopener nofollow"
+              target="_blank"
+            >
+              สั่งซื้อราคาศิษย์เก่า
+            </a>
+          ) : (
+            <button className="btn btn-primary promo-btn" type="button" disabled>
+              กำลังเปิดรับเร็ว ๆ นี้
+            </button>
+          )}
+
+          <p className="promo-hint muted">{promo.codeHint}</p>
+        </aside>
+      )}
 
       {/* 3 · รูปสารบัญ + รูปที่เหลือ */}
       {slides.length > 0 && (

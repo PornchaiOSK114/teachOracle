@@ -226,7 +226,38 @@ export type Product = {
    * ตั้งค่าที่ Vercel › Settings › Environment Variables แล้ว redeploy = ปุ่มทำงานทันที
    */
   buyUrl: string;
+  /** โปรโมชันราคาพิเศษแบบมีวันหมดอายุ — ไม่มีก็เว้นไว้ได้ */
+  promo?: ProductPromo;
 };
+
+/**
+ * โปรโมชันราคาพิเศษ (เช่น ราคาศิษย์เก่า)
+ * กล่องโปรจะหายไปเองเมื่อพ้น `endsAt` ไม่ต้องกลับมาแก้โค้ด
+ */
+export type ProductPromo = {
+  /** ชื่อโปรที่แสดงบนกล่อง */
+  label: string;
+  price: number;
+  /** ลิงก์ Google Form รับออเดอร์ */
+  formUrl: string;
+  /** อธิบายว่าต้องใช้รหัสอะไร (ไม่ใส่ตัวรหัสจริงลงในโค้ด) */
+  codeHint: string;
+  /** วันเวลาปิดรับ รูปแบบ ISO 8601 พร้อม offset ไทย +07:00 (ใช้ตัดสินว่าจะโชว์กล่องไหม) */
+  endsAt: string;
+  /** ข้อความวันปิดรับที่แสดงให้คนอ่าน เขียนเอง ไม่ต้องพึ่งการ format วันที่ */
+  deadlineLabel: string;
+  /** ข้อความบอกวันส่งไฟล์ */
+  deliverNote: string;
+  /** ข้อความเตือนเรื่องอีเมล แสดงเป็นสีแดง */
+  warning: string;
+};
+
+/** โปรยังเปิดรับอยู่ไหม (ประเมินฝั่ง server ตอนสร้างหน้า) */
+export function isPromoOpen(promo: ProductPromo | undefined): promo is ProductPromo {
+  if (!promo) return false;
+  const ends = new Date(promo.endsAt).getTime();
+  return Number.isFinite(ends) && Date.now() < ends;
+}
 
 const ORACLE_26AI_DIR = '/images/products/oracle-26-ai-sql-tuning';
 
@@ -333,6 +364,19 @@ export const products: readonly Product[] = [
       { group: 'ตัวอย่างเนื้อหา', file: 'sample-05', alt: 'ตัวอย่างเนื้อหา — ดูตัวเลขรวมของ session' },
     ],
     buyUrl: process.env.NEXT_PUBLIC_STRIPE_LINK_ORACLE26 ?? '',
+
+    /* โปรราคาศิษย์เก่า — กล่องนี้จะหายไปเองหลัง 31 ส.ค. 2569 เวลา 23:59 */
+    promo: {
+      label: 'ราคาพิเศษสำหรับศิษย์เก่า',
+      price: 490,
+      formUrl: process.env.NEXT_PUBLIC_ALUMNI_FORM_URL ?? '',
+      codeHint: 'ต้องใช้รหัสที่ผมแจกให้ในห้องอบรม',
+      endsAt: '2026-08-31T23:59:59+07:00',
+      deadlineLabel: 'สั่งซื้อได้ถึงวันจันทร์ที่ 31 สิงหาคม 2569 เวลา 23:59',
+      deliverNote: 'เริ่มส่งไฟล์ทางอีเมลวันที่ 1 กันยายน 2569',
+      warning:
+        'กรอกอีเมลให้ถูกต้อง เพราะผมจะส่งไฟล์หนังสือไปที่อีเมลนี้ทางเดียว ถ้าไม่ได้รับให้ดูในกล่อง Spam ก่อน',
+    },
   },
 ];
 

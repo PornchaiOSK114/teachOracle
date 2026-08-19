@@ -1679,6 +1679,76 @@ pre::-webkit-scrollbar-thumb {
   }
 }
 
+/* ---------- 18. กล่องโปรโมชันราคาพิเศษ (หน้า /products/[slug]) ---------- */
+.promo-box {
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  padding: clamp(22px, 4vw, 30px);
+  margin: 0 auto 46px;
+  max-width: 560px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+.promo-badge {
+  display: inline-block;
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.promo-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.promo-price {
+  font-size: clamp(34px, 7vw, 44px);
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.promo-was {
+  font-size: 19px;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.promo-line {
+  margin: 0 0 6px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.promo-warning {
+  margin: 16px 0;
+  padding: 13px 16px;
+  border-radius: var(--radius-btn);
+  border: 1px solid #c0392b;
+  background: rgba(192, 57, 43, 0.08);
+  color: #a5271b;
+  font-size: 14.5px;
+  line-height: 1.7;
+  font-weight: 600;
+  text-align: left;
+}
+[data-theme='dark'] .promo-warning {
+  border-color: #e0715f;
+  background: rgba(224, 113, 95, 0.12);
+  color: #f0a294;
+}
+.promo-btn {
+  width: 100%;
+  max-width: 320px;
+}
+.promo-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

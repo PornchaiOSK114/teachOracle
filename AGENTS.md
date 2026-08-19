@@ -183,6 +183,9 @@ Turbopack จะพังด้วย `the chunking context does not support ext
 | `WRITING_GUIDE.md` | คู่มือเขียนบทความสำหรับเจ้าของเว็บ (ไม่ใช่ agent) |
 | `docs/AGENT_PLAYBOOK.md` | สูตรสร้างเว็บแบบนี้ซ้ำ + gotchas ฉบับเต็มพร้อมคำสั่ง |
 | `docs/ANALYTICS.md` | Cloudflare Analytics + Search Console (ตั้งค่า + วิธีอ่าน) |
+| `docs/PRODUCT_PAGES.md` | ระบบหน้าผลิตภัณฑ์ `/products` + `/products/[slug]` ทำงานยังไง |
+| `docs/PRODUCT_TEMPLATE.md` | แบบฟอร์มกรอกช่องว่างสำหรับเพิ่มสินค้าใหม่ (สำหรับเจ้าของเว็บ) |
+| `docs/ALUMNI_PREORDER.md` | โปรพรีออเดอร์ราคาศิษย์เก่า 490 (Google Form + Apps Script ส่งไฟล์) |
 | `docs/CHANGELOG.md` | ประวัติการเปลี่ยนแปลงและเหตุผล |
 
 **เมื่อแก้อะไรที่กระทบผู้ใช้ ให้อัปเดตเอกสารที่เกี่ยวข้องด้วยเสมอ**
