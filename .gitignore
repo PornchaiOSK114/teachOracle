@@ -32,3 +32,7 @@ yarn-error.log*
 /ClaudeDesign/
 *.zip
 *.bat
+
+# log จาก next dev และ setting ของ editor (เครื่องใครเครื่องมัน)
+.next-dev.*.log
+/.vscode/

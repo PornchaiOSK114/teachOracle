@@ -19,6 +19,8 @@ export const site = {
 
 export const author = {
   name: 'พรชัย ครองธรรมชาติ',
+  /** ชื่อโรมัน — ใช้ในหน้าภาษาอังกฤษ สะกดตามที่พิมพ์ในหนังสือฉบับอังกฤษ */
+  nameEn: 'Pornchai Krongthammachart',
   nickname: 'อาจารย์ตี๋',
   jobTitle: 'Oracle Database Expert / วิทยากรและที่ปรึกษา',
   credential: 'Oracle Certified Professional (OCP)',
@@ -448,3 +450,76 @@ export const nav = [
   { href: '/products', label: 'ผลิตภัณฑ์' },
   { href: '/contact', label: 'ติดต่อ' },
 ] as const;
+
+/* =====================================================================
+ * ชุดติดตั้งแล็บของหนังสือ + รายการแก้ไข (errata)
+ * ---------------------------------------------------------------------
+ * URL สองตัวนี้ถูก "พิมพ์ลงในหนังสือ" ไปแล้ว เปลี่ยนไม่ได้อีก
+ *   ฉบับไทย    คำนำ  →  teedba.com/lab
+ *   ฉบับอังกฤษ คำนำ  →  teedba.com/en/lab
+ *              หน้าลิขสิทธิ์ + ท้ายเล่ม → teedba.com/en/
+ * ===================================================================== */
+
+export type LabKit = {
+  /** ชื่อหนังสือที่แสดงบนหน้า */
+  bookTitle: string;
+  /**
+   * ลิงก์ repo บน GitHub — ยังไม่ตั้งค่า = หน้ายังขึ้นได้ แต่ปุ่มดาวน์โหลดจะเป็นสถานะรอ
+   * (กันไม่ให้มีปุ่มตายให้ผู้อ่านกดแล้วเจอ 404)
+   */
+  repoUrl: string;
+  /** จำนวนไฟล์ .sql ในชุด */
+  scriptCount: number;
+  /** ไฟล์ที่หนังสือสั่งให้รัน — ต้องตรงกับที่พิมพ์ในเล่มเป๊ะ ๆ */
+  entryScript: string;
+  /** โฟลเดอร์ตัวอย่างที่หนังสือใช้ */
+  workDir: string;
+};
+
+const LAB_REPO = process.env.NEXT_PUBLIC_LAB_REPO_URL ?? '';
+
+export const labKitTh: LabKit = {
+  bookTitle: 'Oracle 26ai SQL Tuning',
+  repoUrl: LAB_REPO,
+  scriptCount: 13,
+  entryScript: 'setup_lab.sql',
+  workDir: '/u03/LABS/tune_script',
+};
+
+export const labKitEn: LabKit = {
+  bookTitle: 'Oracle 26ai SQL Tuning',
+  repoUrl: LAB_REPO,
+  scriptCount: 13,
+  entryScript: 'setup_lab.sql',
+  workDir: '/u03/LABS/tune_script',
+};
+
+/** ลิงก์ย่อยของ repo — คำนวณจาก repoUrl ตัวเดียว จะได้ไม่ต้องแก้หลายที่ */
+export function labLinks(kit: LabKit) {
+  if (!kit.repoUrl) return null;
+  const base = kit.repoUrl.replace(/\/+$/, '');
+  return {
+    zip: `${base}/archive/refs/heads/main.zip`,
+    browseTh: `${base}/tree/main/lab/th`,
+    browseEn: `${base}/tree/main/lab/en`,
+    repo: base,
+  };
+}
+
+/**
+ * รายการแก้ไขของฉบับภาษาอังกฤษ
+ * หน้าลิขสิทธิ์ของเล่มเขียนว่า "the current errata list" จึงต้องมีหน้านี้จริง
+ * ยังไม่มีใครรายงานเข้ามา = แสดงสถานะว่างอย่างตรงไปตรงมา ไม่ต้องกุรายการ
+ */
+export type ErrataEntry = {
+  /** ตำแหน่งในเล่ม เช่น 'Chapter 3, page 41' */
+  where: string;
+  /** ข้อความเดิมที่ผิด */
+  printed: string;
+  /** ข้อความที่ถูก */
+  correction: string;
+  /** วันที่บันทึก รูปแบบ YYYY-MM-DD */
+  loggedOn: string;
+};
+
+export const errataEn: readonly ErrataEntry[] = [];

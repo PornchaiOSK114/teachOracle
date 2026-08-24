@@ -1789,6 +1789,40 @@ pre::-webkit-scrollbar-thumb {
   font-size: 13px;
 }
 
+/* ============================================================
+   19 · หน้าชุดติดตั้งแล็บ (/lab, /en/lab) และหน้าฉบับอังกฤษ (/en)
+   ------------------------------------------------------------
+   บล็อกโค้ดใน .product-prose ยังไม่เคยถูกใช้มาก่อน จึงไม่มีสไตล์
+   ยืมหน้าตาเดียวกับ .prose pre มาใช้ จะได้ไม่ต้องคิดชุดสีใหม่
+   ============================================================ */
+.product-prose pre {
+  background: var(--code-bg);
+  color: var(--code-text);
+  border-radius: 14px;
+  margin: 20px 0;
+  padding: 18px 20px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 14.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+.product-prose pre code {
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  padding: 0;
+}
+.product-prose code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.88em;
+}
+.product-prose pre code {
+  border-radius: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -18,6 +18,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${site.url}/about`, changeFrequency: 'monthly', priority: 0.8 },
     { url: `${site.url}/products`, changeFrequency: 'monthly', priority: 0.9 },
     { url: `${site.url}/contact`, changeFrequency: 'yearly', priority: 0.7 },
+    /* หน้าที่ URL ถูกพิมพ์ไว้ในหนังสือแล้ว — ต้องมีตลอดไป */
+    { url: `${site.url}/lab`, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${site.url}/en`, changeFrequency: 'monthly', priority: 0.7 },
+    { url: `${site.url}/en/lab`, changeFrequency: 'monthly', priority: 0.7 },
   ];
 
   /* หน้ารายละเอียดสินค้าแต่ละเล่ม — เพิ่มสินค้าใน lib/site.ts แล้ว sitemap อัปเดตเอง */
