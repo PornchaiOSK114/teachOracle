@@ -86,6 +86,8 @@ export type Purchase = {
   downloads_used: number;
   download_limit: number;
   paid_at: string | null;
+  /** เวลาที่ส่งอีเมลส่งมอบสำเร็จจริง — null = ยังไม่เคยส่งสำเร็จ */
+  delivery_email_sent_at: string | null;
   created_at: string;
 };
 
@@ -123,7 +125,7 @@ export async function insertPurchase(input: {
     ON CONFLICT (stripe_session_id) DO NOTHING
     RETURNING id, order_ref, stripe_session_id, livemode, product_id, email,
               quantity, amount_total, currency, status, downloads_used,
-              download_limit, paid_at, created_at
+              download_limit, paid_at, delivery_email_sent_at, created_at
   `) as Purchase[];
   return rows[0] ?? null;
 }
@@ -132,7 +134,7 @@ export async function getPurchaseBySession(sessionId: string): Promise<Purchase 
   const rows = (await db()`
     SELECT id, order_ref, stripe_session_id, livemode, product_id, email,
            quantity, amount_total, currency, status, downloads_used,
-           download_limit, paid_at, created_at
+           download_limit, paid_at, delivery_email_sent_at, created_at
     FROM purchase WHERE stripe_session_id = ${sessionId}
   `) as Purchase[];
   return rows[0] ?? null;
@@ -142,7 +144,7 @@ export async function getPurchaseById(id: number): Promise<Purchase | null> {
   const rows = (await db()`
     SELECT id, order_ref, stripe_session_id, livemode, product_id, email,
            quantity, amount_total, currency, status, downloads_used,
-           download_limit, paid_at, created_at
+           download_limit, paid_at, delivery_email_sent_at, created_at
     FROM purchase WHERE id = ${id}
   `) as Purchase[];
   return rows[0] ?? null;
@@ -153,7 +155,7 @@ export async function listPurchasesByEmail(email: string): Promise<Purchase[]> {
   return (await db()`
     SELECT id, order_ref, stripe_session_id, livemode, product_id, email,
            quantity, amount_total, currency, status, downloads_used,
-           download_limit, paid_at, created_at
+           download_limit, paid_at, delivery_email_sent_at, created_at
     FROM purchase
     WHERE email = ${normalizeEmail(email)} AND status IN ('paid', 'pending')
     ORDER BY created_at DESC
@@ -173,7 +175,7 @@ export async function markPaid(sessionId: string, paidAt: Date): Promise<Purchas
     WHERE stripe_session_id = ${sessionId} AND status <> 'paid'
     RETURNING id, order_ref, stripe_session_id, livemode, product_id, email,
               quantity, amount_total, currency, status, downloads_used,
-              download_limit, paid_at, created_at
+              download_limit, paid_at, delivery_email_sent_at, created_at
   `) as Purchase[];
   return rows[0] ?? null;
 }
@@ -207,6 +209,20 @@ export async function consumeDownload(purchaseId: number): Promise<number | null
     RETURNING downloads_used
   `) as { downloads_used: number }[];
   return rows[0]?.downloads_used ?? null;
+}
+
+/**
+ * บันทึกว่าอีเมลส่งมอบออกไปสำเร็จแล้ว
+ *
+ * มีไว้เพื่อให้การส่งซ้ำของ Stripe มีความหมาย ถ้ารอบแรกอีเมลล้ม (Resend ล่ม
+ * โดเมนยังไม่ยืนยัน โควตาหมด) เราตอบ 500 ให้ Stripe ส่ง event ซ้ำ
+ * แล้วรอบถัดไปจะเห็นว่าช่องนี้ยังว่างอยู่ จึงส่งอีเมลใหม่แทนที่จะเงียบไป
+ */
+export async function markDeliveryEmailSent(purchaseId: number): Promise<void> {
+  await db()`
+    UPDATE purchase SET delivery_email_sent_at = now(), updated_at = now()
+    WHERE id = ${purchaseId}
+  `;
 }
 
 export async function logDownload(

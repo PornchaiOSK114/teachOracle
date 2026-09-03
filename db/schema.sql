@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS purchase (
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
+-- เวลาที่ส่งอีเมลส่งมอบสำเร็จ (เพิ่มภายหลัง 3 ก.ย. 2569)
+-- null = ยังไม่เคยส่งสำเร็จ ใช้ให้ Stripe ส่ง event ซ้ำแล้วเราส่งอีเมลใหม่ได้
+ALTER TABLE purchase ADD COLUMN IF NOT EXISTS delivery_email_sent_at timestamptz;
+
 -- ค้นด้วยอีเมลตอนลูกค้าเข้าหน้า /download
 CREATE INDEX IF NOT EXISTS purchase_email_idx  ON purchase (email);
 CREATE INDEX IF NOT EXISTS purchase_status_idx ON purchase (status);

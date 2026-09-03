@@ -16,6 +16,7 @@ import {
   getProductByStripePrice,
   getPurchaseBySession,
   insertPurchase,
+  markDeliveryEmailSent,
   markPaid,
   markStatus,
 } from '@/lib/delivery/db';
@@ -133,25 +134,31 @@ async function handleSession(session: Stripe.Checkout.Session, livemode: boolean
         quantity: created.quantity,
         downloadLimit: created.download_limit,
       });
+      await markDeliveryEmailSent(created.id);
     }
     return;
   }
 
-  /* เคยเห็นแล้ว และตอนนั้นเงินยังไม่เข้า — นี่คือเส้นทางหลักของพร้อมเพย์จ่ายช้า */
-  if (paid) {
-    const updated = await markPaid(session.id, new Date());
-    /*
-     * updated เป็น null แปลว่าสถานะเป็น paid อยู่ก่อนแล้ว
-     * = event ซ้ำ ไม่ต้องส่งอีเมลอีก
-     */
-    if (!updated) return;
+  /* เคยเห็นแล้ว — เส้นทางนี้มาได้สองแบบ: พร้อมเพย์จ่ายช้า หรือ Stripe ส่ง event ซ้ำ */
+  if (!paid) return;
 
-    await sendDeliveryEmail({
-      to: updated.email,
-      orderRef: updated.order_ref,
-      bookTitle: product.title,
-      quantity: updated.quantity,
-      downloadLimit: updated.download_limit,
-    });
-  }
+  const updated = await markPaid(session.id, new Date());
+
+  /*
+   * updated เป็น null แปลว่าสถานะเป็น paid อยู่ก่อนแล้ว
+   * ⚠️ ห้ามถือว่า "จ่ายแล้ว" เท่ากับ "ส่งอีเมลแล้ว"
+   * ถ้ารอบก่อนอีเมลล้มกลางทาง เราตอบ 500 ให้ Stripe ส่งซ้ำ แล้วมาโผล่ตรงนี้
+   * ตัวที่ตัดสินว่าต้องส่งหรือไม่คือ delivery_email_sent_at ไม่ใช่สถานะการจ่ายเงิน
+   */
+  const purchase = updated ?? existing;
+  if (purchase.delivery_email_sent_at) return;
+
+  await sendDeliveryEmail({
+    to: purchase.email,
+    orderRef: purchase.order_ref,
+    bookTitle: product.title,
+    quantity: purchase.quantity,
+    downloadLimit: purchase.download_limit,
+  });
+  await markDeliveryEmailSent(purchase.id);
 }

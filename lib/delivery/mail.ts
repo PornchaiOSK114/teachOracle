@@ -18,6 +18,29 @@ function client() {
   return new Resend(requireEnv('RESEND_API_KEY'));
 }
 
+type SendPayload = Parameters<InstanceType<typeof Resend>['emails']['send']>[0];
+
+/**
+ * ส่งอีเมลแล้วโยน error ถ้า Resend ปฏิเสธ
+ *
+ * ⚠️ หัวใจของฟังก์ชันนี้: `resend.emails.send()` **ไม่ throw เมื่อส่งไม่สำเร็จ**
+ * มันคืน { data, error } กลับมาเฉย ๆ ถ้าเราไม่ตรวจ error ตรงนี้
+ * อีเมลที่ส่งไม่ออกจะเงียบสนิท ลูกค้าจ่ายเงินแล้วไม่ได้อะไร และเราไม่รู้ตัว
+ * (เจอมาแล้วตอนทดสอบ 3 ก.ย. 2569 — webhook ตอบ 200 สวยงามทั้งที่ไม่มีอีเมลออกไปเลย)
+ *
+ * โยน error ออกไปแล้วฝั่งเรียกจะตอบ 500 ให้ Stripe ส่ง event ซ้ำ = ได้โอกาสส่งใหม่
+ */
+async function sendOrThrow(payload: SendPayload, what: string) {
+  const { data, error } = await client().emails.send(payload);
+  if (error) {
+    const detail = error.message ?? JSON.stringify(error);
+    throw new Error(`Resend ส่ง${what}ไม่สำเร็จ: ${error.name ?? 'error'} — ${detail}`);
+  }
+  console.info('[mail] ส่งสำเร็จ', what, data?.id);
+  return data;
+}
+
+
 /** ครอบข้อความให้อ่านง่ายบนอีเมล ไม่มีรูป ไม่มีไฟล์ภายนอก โหลดเร็วและไม่ตกไป spam ง่าย */
 function wrapHtml(bodyHtml: string): string {
   return `<!doctype html><html lang="th"><body style="margin:0;padding:24px;background:#f6f7f9;">
@@ -89,14 +112,17 @@ export async function sendDeliveryEmail(input: DeliveryInput) {
 โหลดได้ไม่จำกัด ไม่ต้องใช้รหัส</p>
 <p style="margin:0;">ติดปัญหาตรงไหนตอบอีเมลฉบับนี้กลับมาได้เลยครับ</p>`);
 
-  return client().emails.send({
-    from: requireEnv('RESEND_FROM'),
-    to: input.to,
-    replyTo: SUPPORT_EMAIL,
-    subject: `${input.bookTitle} พร้อมให้ดาวน์โหลดแล้วครับ (${input.orderRef})`,
-    text,
-    html,
-  });
+  return sendOrThrow(
+    {
+      from: requireEnv('RESEND_FROM'),
+      to: input.to,
+      replyTo: SUPPORT_EMAIL,
+      subject: `${input.bookTitle} พร้อมให้ดาวน์โหลดแล้วครับ (${input.orderRef})`,
+      text,
+      html,
+    },
+    'อีเมลส่งมอบหนังสือ',
+  );
 }
 
 /** อีเมลรหัส 6 หลัก ต้องถึงเร็วและอ่านง่าย เพราะลูกค้ากำลังรออยู่หน้าจอ */
@@ -120,12 +146,15 @@ export async function sendOtpEmail(to: string, code: string) {
 <p style="margin:0;color:#6b7280;font-size:14px;">ถ้าคุณไม่ได้เป็นคนขอรหัสนี้ ไม่ต้องทำอะไรครับ
 รหัสจะหมดอายุไปเอง และไม่มีใครเข้าถึงหนังสือของคุณได้ถ้าไม่มีรหัส</p>`);
 
-  return client().emails.send({
-    from: requireEnv('RESEND_FROM'),
-    to,
-    replyTo: SUPPORT_EMAIL,
-    subject: `รหัสดาวน์โหลด ${code}`,
-    text,
-    html,
-  });
+  return sendOrThrow(
+    {
+      from: requireEnv('RESEND_FROM'),
+      to,
+      replyTo: SUPPORT_EMAIL,
+      subject: `รหัสดาวน์โหลด ${code}`,
+      text,
+      html,
+    },
+    'อีเมลรหัส 6 หลัก',
+  );
 }
