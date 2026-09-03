@@ -1834,3 +1834,92 @@ pre::-webkit-scrollbar-thumb {
     scroll-behavior: auto;
   }
 }
+
+/* ---------- 22. หน้ารับหนังสือ /download ---------- */
+.dl-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 26px 24px;
+  background: var(--surface);
+}
+.dl-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.dl-input {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  font-family: inherit;
+}
+.dl-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.dl-code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  letter-spacing: 10px;
+  text-align: center;
+  font-size: 22px;
+}
+.dl-submit {
+  width: 100%;
+  margin-top: 14px;
+  justify-content: center;
+}
+.dl-hint {
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.dl-linklike {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.dl-verified {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.dl-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  padding: 16px 16px 18px;
+  margin-bottom: 14px;
+}
+.dl-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: space-between;
+}
+.dl-ref {
+  font-size: 13px;
+  color: var(--muted);
+}
+.dl-meta {
+  margin: 6px 0 14px;
+  font-size: 13.5px;
+}
+.dl-pending {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.dl-msg {
+  text-align: left;
+}

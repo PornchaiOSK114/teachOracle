@@ -250,6 +250,12 @@ export default async function ProductDetailPage({
                 <td>ไฟล์ที่ได้รับ</td>
                 <td>{product.deliverables.join(' + ')}</td>
               </tr>
+              {product.fileNote && (
+                <tr>
+                  <td>เรื่องไฟล์ที่ควรรู้ก่อน</td>
+                  <td>{product.fileNote}</td>
+                </tr>
+              )}
               <tr>
                 <td>ราคา</td>
                 <td>{priceText} บาท</td>
