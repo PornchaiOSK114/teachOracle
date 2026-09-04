@@ -282,7 +282,7 @@ export default async function ProductDetailPage({
               rel="noopener nofollow"
               target="_blank"
             >
-              สั่งซื้อ E-Book
+              สั่งซื้อ
             </a>
           ) : (
             <button className="btn btn-primary" type="button" disabled>

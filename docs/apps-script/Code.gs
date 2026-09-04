@@ -15,6 +15,9 @@
  *      ครั้งแรกจะขึ้นหน้าขออนุญาต ให้กด Advanced > Go to ... (unsafe) > Allow
  *      (ขึ้นคำว่า unsafe เพราะเป็นสคริปต์ที่เราเขียนเอง ไม่ได้ผ่านการรีวิวของ Google)
  *   5. กลับไปที่ Sheet จะเห็นเมนูใหม่ชื่อ "ส่งหนังสือ" โผล่ขึ้นมา
+ *   6. ตั้งรหัสของหน้าประทับ: Project Settings > Script Properties > Add
+ *      ชื่อ ADMIN_PASSWORD ค่าเดียวกับที่ตั้งไว้ที่ Vercel
+ *      ถ้าไม่ตั้ง สคริปต์จะไม่ยอมส่งไฟล์ให้เลย (กันการส่ง PDF ที่ไม่มีลายน้ำออกไป)
  *
  * วิธีใช้ประจำวัน
  *   เปิดแอปธนาคารเช็คว่าเงินเข้าครบ แล้วพิมพ์ OK ลงในคอลัมน์ "อนุมัติ" ของแถวนั้น
@@ -22,6 +25,9 @@
  *
  * ข้อควรรู้
  *   - Gmail ธรรมดาส่งได้ 100 ฉบับต่อวัน (Google One ไม่ได้เพิ่มโควตาส่วนนี้)
+ *   - ไฟล์ PDF ที่ส่งออกไป **ไม่ได้มาจากโฟลเดอร์ Drive** แต่ขอจากเว็บ teedba.com
+ *     ซึ่งจะประทับอีเมลของลูกค้าลงทุกหน้ายกเว้นหน้าปกก่อนส่งกลับมา
+ *     ไฟล์ในโฟลเดอร์ Drive ที่ยังแนบอยู่คือไฟล์แล็บ .zip เท่านั้น
  *   - ไฟล์แนบรวมกันต้องไม่เกิน 25 MB
  *   - สคริปต์กันการส่งซ้ำให้แล้ว พิมพ์ OK ซ้ำก็ไม่ส่งซ้ำ
  *   - FOLDER_ID ต้องเป็นคนละโฟลเดอร์กับที่ฟอร์มเก็บสลิปที่ลูกค้าอัปโหลด
@@ -62,6 +68,36 @@ var CONFIG = {
   /** คำที่พิมพ์แล้วถือว่าอนุมัติ (ไม่สนตัวพิมพ์เล็กใหญ่) */
   APPROVE_WORD: 'OK',
   STATUS_SENT: 'ส่งแล้ว',
+
+  /* ---------- ระบบประทับ watermark (เพิ่ม 4 ก.ย. 2569) ---------- */
+
+  /**
+   * หน้าเว็บที่ประทับอีเมลผู้ซื้อลงบน PDF ให้
+   *
+   * ทำไมต้องยิงไปที่เว็บแทนที่จะแนบไฟล์จาก Drive ตรง ๆ
+   * เพราะคนที่ซื้อผ่านเว็บกับคนที่โอนตรงมาต้องได้ไฟล์หน้าตาเดียวกัน
+   * ถ้าแยกกันทำ วันหลังเปลี่ยนดีไซน์ลายน้ำแล้วลืมแก้อีกทาง
+   * เวลาไฟล์หลุดออกไปจะสาวไม่ได้ว่ามาจากใคร
+   */
+  STAMP_URL: 'https://teedba.com/api/admin/stamp',
+
+  /** รหัสสินค้า ต้องตรงกับคอลัมน์ id ในตาราง product ของฐานข้อมูล */
+  PRODUCT_ID: 'oracle-26-ai-sql-tuning',
+
+  /**
+   * ชื่อ Script Property ที่เก็บรหัสผ่านของหน้า /admin/stamp
+   *
+   * ⚠️ ห้ามเขียนรหัสลงในไฟล์นี้เด็ดขาด ไฟล์นี้อยู่ใน repo ที่เป็น public
+   * ตั้งที่ Apps Script › Project Settings › Script Properties
+   * ใช้ค่าเดียวกับ ADMIN_PASSWORD ที่ตั้งไว้ใน Vercel
+   */
+  STAMP_PASSWORD_KEY: 'ADMIN_PASSWORD',
+
+  /** ชื่อไฟล์ PDF ที่ลูกค้าเห็นตอนได้รับ */
+  PDF_FILE_NAME: 'Oracle 26ai SQL Tuning.pdf',
+
+  /** คอลัมน์ที่บันทึกเลขประทับของแต่ละแถว ใช้สาวกลับได้ว่าไฟล์ที่หลุดมาจากใคร */
+  COL_STAMP_REF: 'เลขที่ประทับ',
 };
 
 // ==================== เมนูในชีต ====================
@@ -129,13 +165,14 @@ function ensureColumns_(sheet) {
       CONFIG.COL_APPROVE,
       CONFIG.COL_STATUS,
       CONFIG.COL_SENT_AT,
+      CONFIG.COL_STAMP_REF,
     ];
     sheet.getRange(1, 1, 1, full.length).setValues([full]).setFontWeight('bold');
     return;
   }
 
   // ชีตมีข้อมูลอยู่แล้ว (เช่นมาจากฟอร์ม) = เติมเฉพาะคอลัมน์ที่ขาด
-  [CONFIG.COL_APPROVE, CONFIG.COL_STATUS, CONFIG.COL_SENT_AT].forEach(function (name) {
+  [CONFIG.COL_APPROVE, CONFIG.COL_STATUS, CONFIG.COL_SENT_AT, CONFIG.COL_STAMP_REF].forEach(function (name) {
     if (headers.indexOf(name) === -1) {
       var col = sheet.getLastColumn() + 1;
       sheet.getRange(1, col).setValue(name).setFontWeight('bold');
@@ -344,12 +381,20 @@ function sendOne_(sheet, row, headers) {
       return false;
     }
 
-    var files = getAttachments_();
-    if (files.length === 0) throw new Error('ไม่พบไฟล์ในโฟลเดอร์ Drive ที่ตั้งค่าไว้');
+    /*
+     * ขอไฟล์ที่ประทับอีเมลของลูกค้าคนนี้แล้วจากเว็บ
+     *
+     * ⚠️ ถ้าขั้นนี้ล้ม ต้องหยุดทั้งแถว ห้ามตกไปแนบ PDF ต้นฉบับจาก Drive แทน
+     * เพราะนั่นคือการปล่อยไฟล์ที่ไม่มีลายน้ำออกไป ซึ่งสาวกลับไม่ได้ตลอดกาล
+     * ยอมให้ส่งช้าดีกว่าส่งไฟล์ที่ตามรอยไม่ได้
+     */
+    var stamped = fetchStampedPdf_(email);
 
-    var blobs = [];
-    var total = 0;
-    files.forEach(function (f) {
+    var blobs = [stamped.blob];
+    var total = stamped.blob.getBytes().length;
+
+    /* ที่เหลือจาก Drive คือไฟล์แล็บ (.zip) ซึ่งตั้งใจไม่ป้องกันอยู่แล้ว */
+    getAttachments_().forEach(function (f) {
       var blob = f.getBlob();
       total += blob.getBytes().length;
       blobs.push(blob);
@@ -363,6 +408,11 @@ function sendOne_(sheet, row, headers) {
     });
 
     writeStatus_(sheet, row, statusCol, sentAtCol, CONFIG.STATUS_SENT);
+
+    /* จดเลขประทับไว้ จะได้ตอบได้ว่าไฟล์ที่หลุดออกไปเป็นของแถวไหน */
+    var stampCol = headers.indexOf(CONFIG.COL_STAMP_REF) + 1;
+    if (stampCol > 0 && stamped.ref) sheet.getRange(row, stampCol).setValue(stamped.ref);
+
     return true;
   } catch (err) {
     writeStatus_(sheet, row, statusCol, sentAtCol, 'ผิดพลาด: ' + err);
@@ -381,6 +431,7 @@ function buildDeliveryBody_(name) {
     'ในนั้นมีไฟล์ PDF ของหนังสือ และไฟล์ zip ที่เป็นสคริปต์ติดตั้งสภาพแวดล้อมแล็บ\n\n' +
     'ข้อแนะนำจากผมข้อเดียว อย่าอ่านอย่างเดียวครับ ติดตั้งแล็บแล้วรันตามไปด้วยทุกบท ' +
     'เนื้อหาเล่มนี้ผมออกแบบมาให้ลงมือทำตาม ไม่ได้ออกแบบมาให้อ่านผ่าน\n\n' +
+    'ไฟล์ PDF ที่ได้รับจะมีอีเมลของคุณกำกับไว้ทุกหน้ายกเว้นหน้าปก ' +
     'ไฟล์ชุดนี้ผมส่งให้เฉพาะคุณ รบกวนไม่ส่งต่อนะครับ\n\n' +
     'ถ้าเจอตรงไหนที่พิมพ์ผิด อธิบายไม่ชัด หรือรันแล้วไม่ได้ผลอย่างที่เขียนไว้ ตอบกลับอีเมลนี้มาได้เลย ' +
     'ผมรวบรวมข้อแก้ไขไว้ที่เดียวกันหมด\n\n' +
@@ -417,15 +468,71 @@ function getHeaders_(sheet) {
  * เพราะ QR วางไว้โฟลเดอร์เดียวกันเพื่อให้ฟอร์มหยิบไปแสดง
  * ถ้าไม่กรองออก ลูกค้าทุกคนจะได้ QR พร้อมเพย์ของเราแนบไปด้วย
  */
+/**
+ * ไฟล์แนบที่หยิบจาก Drive
+ *
+ * ข้าม QR (ไฟล์รับเงิน ไม่ใช่ของลูกค้า) และข้าม PDF ทุกไฟล์
+ * เพราะ PDF ที่ส่งจริงมาจากระบบประทับ ไม่ใช่ไฟล์ดิบในโฟลเดอร์นี้
+ * เหลือที่แนบจริงคือไฟล์แล็บ .zip
+ */
 function getAttachments_() {
   var out = [];
   var it = DriveApp.getFolderById(CONFIG.FOLDER_ID).getFiles();
   while (it.hasNext()) {
     var f = it.next();
-    if (/^QR\./i.test(f.getName())) continue;
+    var name = f.getName();
+    if (/^QR\./i.test(name)) continue;
+    if (/\.pdf$/i.test(name)) continue;
     out.push(f);
   }
   return out;
+}
+
+/**
+ * ขอไฟล์ PDF ที่ประทับอีเมลของลูกค้าแล้วจากเว็บ
+ *
+ * คืน { blob, ref } — ref คือเลขประทับที่เว็บออกให้ (เช่น 26AI-MK7QP)
+ * ขึ้นต้นด้วย M เพื่อให้ดูออกว่ามาจากการประทับด้วยมือ ไม่ได้ซื้อผ่านเว็บ
+ */
+function fetchStampedPdf_(email) {
+  var password = PropertiesService.getScriptProperties().getProperty(CONFIG.STAMP_PASSWORD_KEY);
+  if (!password) {
+    throw new Error(
+      'ยังไม่ได้ตั้ง ' + CONFIG.STAMP_PASSWORD_KEY +
+      ' ใน Script Properties (Project Settings) ใส่ค่าเดียวกับที่ตั้งไว้ที่ Vercel'
+    );
+  }
+
+  var res = UrlFetchApp.fetch(CONFIG.STAMP_URL, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      password: password,
+      email: email,
+      productId: CONFIG.PRODUCT_ID,
+    }),
+    muteHttpExceptions: true,
+  });
+
+  var code = res.getResponseCode();
+  if (code !== 200) {
+    var detail = '';
+    try {
+      detail = JSON.parse(res.getContentText()).error || '';
+    } catch (err) {
+      detail = String(res.getContentText()).slice(0, 200);
+    }
+    throw new Error('ขอไฟล์ประทับจากเว็บไม่สำเร็จ (HTTP ' + code + ') ' + detail);
+  }
+
+  /* ชื่อ header ตัวพิมพ์เล็กใหญ่ไม่แน่นอน ต้องลองทั้งสองแบบ */
+  var headers = res.getAllHeaders();
+  var ref = headers['X-Order-Ref'] || headers['x-order-ref'] || '';
+
+  return {
+    blob: res.getBlob().setName(CONFIG.PDF_FILE_NAME),
+    ref: String(ref),
+  };
 }
 
 function writeStatus_(sheet, row, statusCol, sentAtCol, status) {
