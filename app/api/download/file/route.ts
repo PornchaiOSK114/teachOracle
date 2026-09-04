@@ -16,11 +16,12 @@ import {
   getPurchaseById,
   getPurchaseBySession,
   logDownload,
+  refundDownload,
   type Purchase,
 } from '@/lib/delivery/db';
 import { getMasterPdf } from '@/lib/delivery/blob';
 import { stampPdf, todayInBangkok } from '@/lib/delivery/watermark';
-import { GRANT_COOKIE, readGrant } from '@/lib/delivery/grant';
+import { GRANT_COOKIE, GRANT_TTL_MINUTES, createGrant, readGrant } from '@/lib/delivery/grant';
 import { POST_PAYMENT_GRACE_MINUTES } from '@/lib/delivery/config';
 
 export const runtime = 'nodejs';
@@ -44,6 +45,8 @@ export async function GET(request: Request) {
   const sessionParam = url.searchParams.get('session');
 
   let purchase: Purchase | null = null;
+  /** อีเมลจากใบผ่าน — มีค่าเฉพาะทางที่ 1 ใช้ต่ออายุใบผ่านเมื่อโหลดสำเร็จ */
+  let grantedEmail: string | null = null;
 
   if (sessionParam) {
     /* ทางที่ 2 — เพิ่งจ่ายเงินเสร็จ */
@@ -64,7 +67,7 @@ export async function GET(request: Request) {
   } else if (purchaseParam) {
     /* ทางที่ 1 — ผ่านด่านรหัสมาแล้ว */
     const jar = await cookies();
-    const grantedEmail = readGrant(jar.get(GRANT_COOKIE)?.value);
+    grantedEmail = readGrant(jar.get(GRANT_COOKIE)?.value);
     if (!grantedEmail) {
       return deny('การยืนยันหมดอายุแล้ว กรุณาขอรหัสใหม่', 401);
     }
@@ -120,24 +123,46 @@ export async function GET(request: Request) {
 
     await logDownload(purchase.id, ipPrefix(request), request.headers.get('user-agent'));
 
-    return new NextResponse(stamped as unknown as BodyInit, {
+    const response = new NextResponse(stamped as unknown as BodyInit, {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Length': String(stamped.byteLength),
         'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(product.file_name)}`,
         'Cache-Control': 'private, no-store',
         'X-Content-Type-Options': 'nosniff',
+        /* ให้หน้าเว็บอ่านได้ว่าเหลือกี่ครั้ง โดยไม่ต้องเดาเอง */
+        'X-Downloads-Left': String(Math.max(purchase.download_limit - used, 0)),
       },
     });
+
+    /*
+     * ต่ออายุใบผ่านทุกครั้งที่โหลดสำเร็จ
+     * คนที่กำลังใช้งานอยู่จึงไม่มีวันโดนเตะออกกลางคัน ส่วนคนที่ปิดหน้าไปแล้ว
+     * ใบผ่านก็ยังหมดอายุตามกำหนดเดิม ไม่ได้กลายเป็นการจำเครื่องถาวร
+     */
+    if (grantedEmail) {
+      response.cookies.set(GRANT_COOKIE, createGrant(grantedEmail), {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: GRANT_TTL_MINUTES * 60,
+      });
+    }
+
+    return response;
   } catch (err) {
     console.error('[download] สร้างไฟล์ไม่สำเร็จ', purchase.order_ref, err);
     /*
-     * โควตาถูกตัดไปแล้วแต่ลูกค้าไม่ได้ไฟล์ จึงต้องบอกให้ชัดว่าติดต่อใครได้
-     * ไม่คืนโควตาอัตโนมัติ เพราะถ้าคืนแล้วมีคนหาวิธีทำให้ขั้นตอนนี้ล้มซ้ำ ๆ
-     * ก็จะโหลดได้ไม่จำกัด การให้เจ้าของเว็บรีเซ็ตเองปลอดภัยกว่า
+     * คืนโควตาที่เพิ่งตัดไป เพราะความล้มเหลวตรงนี้เป็นความผิดของฝั่งเราล้วน ๆ
+     * (ดึงไฟล์จาก Blob ไม่ได้ หรือประทับ watermark ล้ม) ลูกค้าไม่ได้ไฟล์
+     * จึงต้องไม่เสียสิทธิ์ไปด้วย — จุดนี้ปลอดภัยเพราะทำให้ล้มซ้ำ ๆ ตามใจไม่ได้
+     * ต่างจากการคืนตอนเน็ตหลุด ซึ่งเซิร์ฟเวอร์แยกไม่ออกว่าได้ไฟล์ครบหรือยัง
      */
+    await refundDownload(purchase.id);
     return deny(
-      'สร้างไฟล์ไม่สำเร็จ กรุณาติดต่อ pornchai.krong@gmail.com พร้อมแจ้งเลขที่คำสั่งซื้อ ' +
+      'สร้างไฟล์ไม่สำเร็จ ระบบคืนสิทธิ์ครั้งนี้ให้แล้ว ลองใหม่อีกครั้งได้ ' +
+        'ถ้ายังไม่ได้ ติดต่อ pornchai.krong@gmail.com พร้อมแจ้งเลขที่คำสั่งซื้อ ' +
         purchase.order_ref,
       500,
     );

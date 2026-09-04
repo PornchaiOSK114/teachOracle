@@ -225,6 +225,25 @@ export async function markDeliveryEmailSent(purchaseId: number): Promise<void> {
   `;
 }
 
+/**
+ * คืนโควตาที่ตัดไปแล้วหนึ่งครั้ง
+ *
+ * ใช้เฉพาะกรณีที่ "ตัดโควตาไปแล้วแต่ลูกค้าไม่ได้ไฟล์เพราะความผิดของฝั่งเรา"
+ * เช่น ดึงไฟล์จาก Blob ไม่ได้ หรือประทับ watermark ล้ม
+ * ลูกค้าไม่ควรเสียสิทธิ์เพราะระบบเราพังเอง
+ *
+ * ⚠️ ห้ามเรียกจากที่อื่น โดยเฉพาะห้ามเรียกตอนลูกค้ากดยกเลิกหรือเน็ตหลุด
+ * เพราะเซิร์ฟเวอร์ไม่มีทางรู้ว่าไฟล์ถึงปลายทางครบหรือยัง
+ * ถ้าคืนให้ทุกกรณี คนที่ตั้งใจจะโกงก็แค่ตัดการเชื่อมต่อทุกครั้งแล้วโหลดได้ไม่จำกัด
+ */
+export async function refundDownload(purchaseId: number): Promise<void> {
+  await db()`
+    UPDATE purchase
+    SET downloads_used = GREATEST(downloads_used - 1, 0), updated_at = now()
+    WHERE id = ${purchaseId}
+  `;
+}
+
 export async function logDownload(
   purchaseId: number,
   ipPrefix: string | null,
