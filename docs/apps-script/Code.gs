@@ -557,9 +557,16 @@ function safeNotifyOwnerError_(where, err) {
 
 /** ส่งอีเมลตัวอย่างพร้อมไฟล์แนบจริงมาหาตัวเอง ใช้เช็คก่อนเปิดขาย */
 function previewEmailToSelf() {
-  var files = getAttachments_();
-  var blobs = files.map(function (f) {
-    return f.getBlob();
+  /*
+   * ต้องเดินเส้นทางเดียวกับของจริงทุกขั้น รวมทั้งขอไฟล์ประทับจากเว็บ
+   * ไม่งั้นเมนูนี้จะบอกได้แค่ว่า "ส่งอีเมลออก" แต่ไม่บอกว่าระบบประทับใช้ได้ไหม
+   * ซึ่งเป็นจุดที่พังง่ายที่สุด (ลืมตั้งรหัส เว็บล่ม โดเมนเปลี่ยน)
+   */
+  var stamped = fetchStampedPdf_(CONFIG.OWNER_EMAIL);
+
+  var blobs = [stamped.blob];
+  getAttachments_().forEach(function (f) {
+    blobs.push(f.getBlob());
   });
 
   GmailApp.sendEmail(
@@ -569,7 +576,12 @@ function previewEmailToSelf() {
     { name: CONFIG.SENDER_NAME, attachments: blobs }
   );
 
-  SpreadsheetApp.getUi().alert('ส่งอีเมลทดสอบไปที่ ' + CONFIG.OWNER_EMAIL + ' แล้ว (' + files.length + ' ไฟล์แนบ)');
+  SpreadsheetApp.getUi().alert(
+    'ส่งอีเมลทดสอบไปที่ ' + CONFIG.OWNER_EMAIL + ' แล้ว\n\n' +
+      'ไฟล์แนบ ' + blobs.length + ' ไฟล์\n' +
+      'เลขที่ประทับ: ' + (stamped.ref || '(เว็บไม่ได้ส่งเลขกลับมา)') + '\n\n' +
+      'เปิดไฟล์ PDF ดูมุมบนซ้ายว่ามีอีเมลกำกับไว้จริงไหม'
+  );
 }
 
 function showQuota() {
