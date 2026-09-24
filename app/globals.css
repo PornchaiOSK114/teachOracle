@@ -613,13 +613,25 @@ h4 {
 }
 
 .card-banner {
-  height: 150px;
+  aspect-ratio: 16 / 9;
   background: linear-gradient(135deg, #141a24, #242c3a);
   position: relative;
   display: flex;
   align-items: flex-end;
   padding: 16px;
   overflow: hidden;
+}
+.card-cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #fff;
+  overflow: hidden;
+}
+.card-body .card-cover-category {
+  align-self: flex-start;
+  margin-bottom: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .card-glyph {
   position: absolute;

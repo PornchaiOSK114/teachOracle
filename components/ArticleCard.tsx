@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import type { ArticleMeta } from '@/lib/types';
 import { formatDateThai } from '@/lib/format';
 
@@ -14,13 +15,26 @@ export default function ArticleCard({
 
   return (
     <article className="card card-hover">
-      <div className="card-banner">
-        <span className="card-glyph" aria-hidden="true">
-          {glyph}
-        </span>
-        <span className="card-cat">{article.category}</span>
-      </div>
+      {article.cover ? (
+        <div className="card-cover">
+          <Image
+            src={article.cover}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 980px) 50vw, 400px"
+            style={{ objectFit: 'contain' }}
+          />
+        </div>
+      ) : (
+        <div className="card-banner">
+          <span className="card-glyph" aria-hidden="true">
+            {glyph}
+          </span>
+          <span className="card-cat">{article.category}</span>
+        </div>
+      )}
       <div className="card-body">
+        {article.cover && <span className="card-cat card-cover-category">{article.category}</span>}
         <h3 className="card-title">
           <Link href={`/articles/${article.slug}`} className="card-link">
             {article.title}
