@@ -3,6 +3,7 @@ title: "อย่ามาเสียใจภายหลัง หากไ�
 description: "NOARCHIVELOG ทำให้กู้ข้อมูลย้อนเวลาไม่ได้ เข้าใจความต่างจาก ARCHIVELOG mode วิธีเช็คระบบด้วยคำสั่งเดียว และขั้นตอนเปิดใช้ใน 5 นาที"
 tldr: "NOARCHIVELOG เขียนทับ redo log ทิ้งไปเลย จึงกู้ได้แค่จุดที่ backup ล่าสุดและ backup ขณะระบบเปิดอยู่ไม่ได้ (ORA-19602) ส่วน ARCHIVELOG เก็บสำเนาก่อนเขียนทับ จึงทำ point-in-time recovery ย้อนไปเวลาที่ต้องการได้ เปิดด้วยสี่คำสั่งตอน MOUNT คือ SHUTDOWN IMMEDIATE, STARTUP MOUNT, ALTER DATABASE ARCHIVELOG, ALTER DATABASE OPEN แล้วต้องเตรียมพื้นที่เก็บให้พอ ตั้งรอบลบผ่าน RMAN ห้ามลบไฟล์เอง และซ้อมกู้จริงอย่างน้อยปีละครั้ง"
 category: "Backup & Recovery"
+cover: "/images/articles/week01-03-wed-noarchivelog.webp"
 tags: ["ARCHIVELOG mode", "Oracle กู้ข้อมูล", "NOARCHIVELOG", "point-in-time recovery"]
 date: "2026-09-28"
 draft: false
