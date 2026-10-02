@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import AssetImage from '@/components/AssetImage';
 import JsonLd from '@/components/JsonLd';
 import SampleCarousel, { type CarouselSlide } from '@/components/SampleCarousel';
+import OracleBookLanding from '@/components/OracleBookLanding';
 import { resolveAsset } from '@/lib/assets';
 import { products, getProduct, isPromoOpen, site, author } from '@/lib/site';
 
@@ -80,6 +81,10 @@ export default async function ProductDetailPage({
   const canBuy = product.buyUrl.length > 0;
   const promo = isPromoOpen(product.promo) ? product.promo : null;
   const promoOpen = promo !== null && promo.orderUrl.length > 0;
+
+  if (product.slug === 'oracle-26-ai-sql-tuning') {
+    return <OracleBookLanding product={product} cover={cover} slides={slides} />;
+  }
 
   return (
     <section className="container-prose section" style={{ maxWidth: 860 }}>
