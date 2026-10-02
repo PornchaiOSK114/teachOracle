@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Course } from '@/lib/site';
 
-export default function CourseCard({ course }: { course: Course }) {
+export default function CourseCard({ course, locale = 'th' }: { course: Course; locale?: 'th' | 'en' }) {
   return (
     <article className="course-card card-hover">
       <div className="course-head">
@@ -28,8 +28,8 @@ export default function CourseCard({ course }: { course: Course }) {
         <span className="muted" style={{ fontSize: 13.5 }}>
           ⏱ {course.duration}
         </span>
-        <Link href="/contact" className="btn btn-primary btn-sm">
-          สอบถาม
+        <Link href={locale === 'en' ? '/english/contact' : '/contact'} className="btn btn-primary btn-sm">
+          {locale === 'en' ? 'Enquire' : 'สอบถาม'}
         </Link>
       </div>
     </article>

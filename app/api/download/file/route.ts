@@ -35,8 +35,8 @@ function ipPrefix(request: Request): string | null {
   return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[2]}.x` : raw.slice(0, 12);
 }
 
-function deny(message: string, status: number) {
-  return NextResponse.json({ error: message }, { status });
+function deny(message: string, status: number, code: string, details: { limit?: number } = {}) {
+  return NextResponse.json({ error: message, code, ...details }, { status });
 }
 
 export async function GET(request: Request) {
@@ -51,17 +51,17 @@ export async function GET(request: Request) {
   if (sessionParam) {
     /* ทางที่ 2 — เพิ่งจ่ายเงินเสร็จ */
     purchase = await getPurchaseBySession(sessionParam);
-    if (!purchase) return deny('ไม่พบคำสั่งซื้อนี้', 404);
+    if (!purchase) return deny('ไม่พบคำสั่งซื้อนี้', 404, 'purchase_not_found');
 
     if (purchase.status !== 'paid' || !purchase.paid_at) {
-      return deny('ยังยืนยันการชำระเงินไม่สำเร็จ กรุณารอสักครู่', 409);
+      return deny('ยังยืนยันการชำระเงินไม่สำเร็จ กรุณารอสักครู่', 409, 'payment_pending');
     }
 
     const ageMinutes = (Date.now() - new Date(purchase.paid_at).getTime()) / 60_000;
     if (ageMinutes > POST_PAYMENT_GRACE_MINUTES) {
       return deny(
         'ลิงก์นี้หมดอายุแล้ว กรุณาไปที่หน้าดาวน์โหลดแล้วขอรหัสยืนยันทางอีเมล',
-        403,
+        403, 'session_expired',
       );
     }
   } else if (purchaseParam) {
@@ -69,14 +69,14 @@ export async function GET(request: Request) {
     const jar = await cookies();
     grantedEmail = readGrant(jar.get(GRANT_COOKIE)?.value);
     if (!grantedEmail) {
-      return deny('การยืนยันหมดอายุแล้ว กรุณาขอรหัสใหม่', 401);
+      return deny('การยืนยันหมดอายุแล้ว กรุณาขอรหัสใหม่', 401, 'grant_expired');
     }
 
     const id = Number(purchaseParam);
-    if (!Number.isInteger(id) || id <= 0) return deny('คำขอไม่ถูกต้อง', 400);
+    if (!Number.isInteger(id) || id <= 0) return deny('คำขอไม่ถูกต้อง', 400, 'invalid_request');
 
     purchase = await getPurchaseById(id);
-    if (!purchase) return deny('ไม่พบคำสั่งซื้อนี้', 404);
+    if (!purchase) return deny('ไม่พบคำสั่งซื้อนี้', 404, 'purchase_not_found');
 
     /*
      * ⚠️ ด่านสำคัญที่สุดของทั้งไฟล์
@@ -85,18 +85,18 @@ export async function GET(request: Request) {
      * ไม่งั้นใครก็ยืนยันอีเมลตัวเองแล้วเดาเลขออเดอร์ของคนอื่นเอาหนังสือไปได้
      */
     if (purchase.email !== grantedEmail) {
-      return deny('คำสั่งซื้อนี้ไม่ใช่ของอีเมลที่ยืนยันไว้', 403);
+      return deny('คำสั่งซื้อนี้ไม่ใช่ของอีเมลที่ยืนยันไว้', 403, 'wrong_owner');
     }
 
     if (purchase.status !== 'paid') {
-      return deny('คำสั่งซื้อนี้ยังไม่พร้อมให้ดาวน์โหลด', 409);
+      return deny('คำสั่งซื้อนี้ยังไม่พร้อมให้ดาวน์โหลด', 409, 'payment_pending');
     }
   } else {
-    return deny('คำขอไม่ถูกต้อง', 400);
+    return deny('คำขอไม่ถูกต้อง', 400, 'invalid_request');
   }
 
   const product = await getProductById(purchase.product_id);
-  if (!product) return deny('ไม่พบข้อมูลสินค้า', 500);
+  if (!product) return deny('ไม่พบข้อมูลสินค้า', 500, 'product_missing');
 
   /*
    * ตัดโควตาก่อนส่งไฟล์เสมอ
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
   if (used === null) {
     return deny(
       `ดาวน์โหลดครบ ${purchase.download_limit} ครั้งแล้ว ถ้ายังต้องการอีก ติดต่อ pornchai.krong@gmail.com ได้เลยครับ`,
-      403,
+      403, 'quota_exhausted', { limit: purchase.download_limit },
     );
   }
 
@@ -164,7 +164,7 @@ export async function GET(request: Request) {
       'สร้างไฟล์ไม่สำเร็จ ระบบคืนสิทธิ์ครั้งนี้ให้แล้ว ลองใหม่อีกครั้งได้ ' +
         'ถ้ายังไม่ได้ ติดต่อ pornchai.krong@gmail.com พร้อมแจ้งเลขที่คำสั่งซื้อ ' +
         purchase.order_ref,
-      500,
+      500, 'file_failed',
     );
   }
 }

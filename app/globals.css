@@ -1935,3 +1935,9 @@ pre::-webkit-scrollbar-thumb {
 .dl-msg {
   text-align: left;
 }
+/* Keep the language choice outside the collapsed mobile navigation. */
+.language-switch { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 9px; color: var(--nav-text); border: 1px solid var(--nav-border); background: var(--nav-hover); border-radius: 8px; font-weight: 600; text-decoration: none; }
+.language-switch:hover { color: var(--nav-text); border-color: var(--nav-text); }
+.language-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+html[lang="en"] .brand-name { font-size: 17px; }
+@media (max-width: 480px) { html[lang="en"] .brand-name { max-width: 140px; font-size: 14px; } }

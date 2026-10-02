@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 type Status = 'idle' | 'loading' | 'ok' | 'error';
 
-export default function NewsletterForm() {
+export default function NewsletterForm({ locale = 'th' }: { locale?: 'th' | 'en' }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [message, setMessage] = useState('');
@@ -24,15 +24,15 @@ export default function NewsletterForm() {
 
       if (res.ok) {
         setStatus('ok');
-        setMessage(data.message ?? 'ขอบคุณครับ! กรุณาตรวจอีเมลเพื่อยืนยันการสมัคร');
+        setMessage(locale === 'en' ? 'Thank you. Please check your email to confirm your subscription.' : (data.message ?? 'ขอบคุณครับ! กรุณาตรวจอีเมลเพื่อยืนยันการสมัคร'));
         setEmail('');
       } else {
         setStatus('error');
-        setMessage(data.message ?? 'สมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+        setMessage(locale === 'en' ? 'We could not complete your request. Please try again later.' : (data.message ?? 'สมัครไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
       }
     } catch {
       setStatus('error');
-      setMessage('เชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง');
+      setMessage(locale === 'en' ? 'Connection failed. Please try again.' : 'เชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง');
     }
   }
 
@@ -40,7 +40,7 @@ export default function NewsletterForm() {
     <>
       <form onSubmit={onSubmit} className="form-row">
         <label htmlFor="newsletter-email" className="sr-only">
-          อีเมลของคุณ
+          {locale === 'en' ? 'Your email' : 'อีเมลของคุณ'}
         </label>
         <input
           id="newsletter-email"
@@ -51,11 +51,11 @@ export default function NewsletterForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="อีเมลของคุณ"
+          placeholder={locale === 'en' ? 'Your email' : 'อีเมลของคุณ'}
           disabled={status === 'loading'}
         />
         <button type="submit" className="btn btn-primary" disabled={status === 'loading'}>
-          {status === 'loading' ? 'กำลังส่ง…' : 'แจ้งเตือนฉัน'}
+          {status === 'loading' ? (locale === 'en' ? 'Sending…' : 'กำลังส่ง…') : (locale === 'en' ? 'Keep me informed' : 'แจ้งเตือนฉัน')}
         </button>
       </form>
 
@@ -72,8 +72,7 @@ export default function NewsletterForm() {
 
       {/* ข้อความยินยอมตาม PDPA — จำเป็นสำหรับการเก็บอีเมลในไทย */}
       <p className="form-note">
-        กรอกอีเมลเพื่อรับข่าวสารความรู้และผลิตภัณฑ์ใหม่เท่านั้น ไม่ส่งต่อให้บุคคลที่สาม
-        และยกเลิกรับข่าวได้ทุกเมื่อจากลิงก์ท้ายอีเมล
+        {locale === 'en' ? 'Your email is used for knowledge and product updates only, not shared with third parties. Unsubscribe at any time using the link in each email.' : 'กรอกอีเมลเพื่อรับข่าวสารความรู้และผลิตภัณฑ์ใหม่เท่านั้น ไม่ส่งต่อให้บุคคลที่สาม และยกเลิกรับข่าวได้ทุกเมื่อจากลิงก์ท้ายอีเมล'}
       </p>
     </>
   );

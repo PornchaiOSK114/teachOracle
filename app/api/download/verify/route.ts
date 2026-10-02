@@ -30,11 +30,11 @@ export async function POST(request: Request) {
     email = normalizeEmail(String(body.email ?? ''));
     code = String(body.code ?? '').trim();
   } catch {
-    return NextResponse.json({ error: 'รูปแบบคำขอไม่ถูกต้อง' }, { status: 400 });
+    return NextResponse.json({ error: 'รูปแบบคำขอไม่ถูกต้อง', code: 'invalid_request' }, { status: 400 });
   }
 
   if (!email || !/^\d{6}$/.test(code)) {
-    return NextResponse.json({ error: 'กรุณากรอกรหัส 6 หลัก' }, { status: 400 });
+    return NextResponse.json({ error: 'กรุณากรอกรหัส 6 หลัก', code: 'invalid_code_format' }, { status: 400 });
   }
 
   const result = await verifyOtp(email, code);
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
           : result.reason === 'no_code'
             ? 'ยังไม่ได้ขอรหัส หรือรหัสถูกใช้ไปแล้ว กดขอรหัสใหม่'
             : `รหัสไม่ถูกต้อง เหลืออีก ${result.attemptsLeft} ครั้ง`;
-    return NextResponse.json({ error: message }, { status: 401 });
+    return NextResponse.json({ error: message, code: 'otp_' + result.reason, attemptsLeft: result.attemptsLeft, ...(result.reason === 'locked' ? { retryAfterSeconds: OTP.LOCK_MINUTES * 60 } : {}) }, { status: 401 });
   }
 
   const purchases = await listPurchasesByEmail(email);

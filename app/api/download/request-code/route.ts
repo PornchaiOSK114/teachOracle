@@ -18,11 +18,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { email?: unknown };
     email = normalizeEmail(String(body.email ?? ''));
   } catch {
-    return NextResponse.json({ error: 'รูปแบบคำขอไม่ถูกต้อง' }, { status: 400 });
+    return NextResponse.json({ error: 'รูปแบบคำขอไม่ถูกต้อง', code: 'invalid_request' }, { status: 400 });
   }
 
   if (!EMAIL_RE.test(email)) {
-    return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, { status: 400 });
+    return NextResponse.json({ error: 'กรุณากรอกอีเมลให้ถูกต้อง', code: 'invalid_email' }, { status: 400 });
   }
 
   /*
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
   if (purchases.length === 0) {
     return NextResponse.json(
       {
+        code: 'purchase_not_found',
         error:
           'ไม่พบคำสั่งซื้อของอีเมลนี้ ถ้าคิดว่ากรอกอีเมลผิดตอนสั่งซื้อ ติดต่อ pornchai.krong@gmail.com ได้เลยครับ',
       },
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
         : issued.reason === 'cooldown'
           ? `เพิ่งส่งรหัสไปเมื่อสักครู่ รออีก ${issued.retryAfterSeconds} วินาทีแล้วกดใหม่`
           : `ขอรหัสบ่อยเกินไป ลองใหม่ในอีก ${minutes} นาที`;
-    return NextResponse.json({ error: message }, { status: 429 });
+    return NextResponse.json({ error: message, code: 'otp_' + issued.reason, retryAfterSeconds: issued.retryAfterSeconds }, { status: 429 });
   }
 
   try {
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error('[request-code] ส่งอีเมลไม่สำเร็จ', err);
     return NextResponse.json(
-      { error: 'ส่งอีเมลไม่สำเร็จ ลองใหม่อีกครั้ง ถ้ายังไม่ได้ติดต่อ pornchai.krong@gmail.com' },
+      { error: 'ส่งอีเมลไม่สำเร็จ ลองใหม่อีกครั้ง ถ้ายังไม่ได้ติดต่อ pornchai.krong@gmail.com', code: 'email_failed' },
       { status: 502 },
     );
   }

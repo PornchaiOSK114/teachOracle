@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Keep owner-maintained agent instructions unchanged when running Next.js.
   agentRules: false,
+  experimental: { globalNotFound: true },
   images: {
     formats: ['image/avif', 'image/webp'],
   },

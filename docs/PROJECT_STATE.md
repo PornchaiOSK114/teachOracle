@@ -18,3 +18,18 @@ Stripe webhook, Neon, Resend, Blob private, OTP/grant, watermark, download quota
 ก่อนงานเอกสาร: บทความ _example-thai-charset.mdx ถูกแก้, ora-01555-snapshot-too-old.mdx ถูกลบ และ package-lock.json เป็น untracked
 อย่ารวมเข้า commit เอกสารหรือคืนไฟล์โดยไม่ได้รับคำสั่ง
 Snapshot .agent-handoff/current เดิมเลิกใช้หลังปรับเอกสารชุดนี้; สำเนาก่อนลบเก็บไว้นอก repository
+
+## 2026-10-02 — English website release preparation
+
+เจ้าของอนุมัติให้รับงาน Publisher และแก้ทั้ง 5 กลุ่มใน BILINGUAL_REVIEW_2026-10-02.md แล้วเลือก `/english/` สำหรับเว็บไซต์อังกฤษ คง `/en` และ `/en/lab` เป็นหน้าข้อมูลหนังสือเดิม
+
+- รวมใน worktree `C:\โปรเจ็คเล่นสนุกของตี๋\Web Blog\teedba-english-20261002` บนฐาน GitHub main `9240a02`; original checkout ที่ cf2f557 และงานค้างยังไม่ถูกเปลี่ยน
+- หน้าสาธารณะอังกฤษและบทความ 3 คู่พร้อมภาพปกล่าสุด; renderer และขั้นตอน download/thank-you ใช้ร่วมกัน แปล error ตามรหัสโดยไม่เปลี่ยนสิทธิ์
+- Local verification: lint, TypeScript/build, behavior mocks, content hashes/code blocks, HTTP 22 paired pages + preserved /en, 4 private flows, 8 invalid routes, feeds/sitemap/OG ผ่าน
+- Browser local: desktop 1280×720 และ mobile 390×844; search/filter/no-results, TH↔EN, mobile menu และ light/dark ผ่านในหน้าที่ตรวจ
+- ใช้ Next.js globalNotFound สำหรับ fallback 404 สองภาษา; build ยังมี metadataBase warning ของ internal fallback แต่ HTTP ที่ตรวจไม่พบ localhost metadata ในหน้าสาธารณะและ unmatched 404
+- ไม่ทดสอบเงินจริง ส่ง OTP/อีเมล หรือดาวน์โหลด PDF จริง; Stripe checkout/email locale และ Publisher automation ยังตามระบบเดิม
+- GitHub/deployment/live verification: รอใส่หลักฐานหลังเผยแพร่ ไม่ถือ local build เป็นผล production
+
+คู่มือโครงสร้างและดูแลต่อ: [BILINGUAL_SITE.md](BILINGUAL_SITE.md)
+- Browser local เพิ่มเติม: public sample preview เปิด/เลื่อน/ปิดได้; หน้า product อังกฤษบนมือถือไม่ล้นแนวนอน และแสดงภาษา PDF ชัดเจน

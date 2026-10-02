@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { nav, site } from '@/lib/site';
+import { useState } from 'react';
+import { nav as thaiNav, site } from '@/lib/site';
+import { localizedPath, type Locale } from '@/lib/i18n';
 import ThemeToggle from './ThemeToggle';
 
 function DatabaseIcon() {
@@ -26,32 +27,33 @@ function DatabaseIcon() {
   );
 }
 
-export default function Navbar() {
+export default function Navbar({ locale = 'th', pairs }: { locale?: Locale; pairs: Record<string, string> }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  // ปิดเมนูมือถืออัตโนมัติเมื่อเปลี่ยนหน้า
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
+  const en = locale === 'en';
+  const labels = ['Home', 'Articles', 'Courses', 'About Tee', 'Products', 'Contact'];
+  const nav = thaiNav.map((item, i) => ({ href: localizedPath(item.href, locale), label: en ? labels[i] : item.label }));
+  const switchHref = pairs[pathname.replace(/\/$/, '') || '/'];
+  const untranslatedArticle = !switchHref && /^\/(english\/)?articles\/[^/]+$/.test(pathname);
   const isActive = (href: string) =>
-    href === '/' ? pathname === '/' : pathname.startsWith(href);
+    href === localizedPath('/', locale) ? pathname === href : pathname.startsWith(href);
 
   return (
     <header className="header">
       <div className="header-inner">
-        <Link href="/" className="brand" aria-label={`${site.name} — หน้าแรก`}>
+        <Link href={localizedPath('/', locale)} className="brand" aria-label={en ? 'teeDBA — Home' : `${site.name} — หน้าแรก`}>
           <span className="brand-mark">
             <DatabaseIcon />
           </span>
-          <strong className="brand-name">{site.name}</strong>
+          <strong className="brand-name">{en ? 'teeDBA · Oracle with Tee' : site.name}</strong>
         </Link>
 
-        <nav className="nav-desktop" aria-label="เมนูหลัก">
+        <nav className="nav-desktop" aria-label={en ? 'Main navigation' : 'เมนูหลัก'}>
           {nav.map((item) => (
             <Link
               key={item.href}
+              onClick={() => setOpen(false)}
               href={item.href}
               className="nav-link"
               aria-current={isActive(item.href) ? 'page' : undefined}
@@ -62,11 +64,13 @@ export default function Navbar() {
         </nav>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ThemeToggle />
+          {switchHref && <a className="language-switch" href={switchHref} hrefLang={en ? 'th' : 'en'} lang={en ? 'th' : 'en'} aria-label={en ? 'อ่านภาษาไทย' : 'Read in English'} onClick={(event) => { event.preventDefault(); window.location.assign(switchHref + window.location.search + window.location.hash); }}>{en ? 'ไทย' : 'EN'}</a>}
+          {untranslatedArticle && <span className="sr-only" role="status">{en ? 'Thai translation is not available yet.' : 'ยังไม่มีคำแปลภาษาอังกฤษสำหรับบทความนี้'}</span>}
+          <ThemeToggle locale={locale} />
           <button
             type="button"
             className="icon-btn burger"
-            aria-label={open ? 'ปิดเมนู' : 'เปิดเมนู'}
+            aria-label={open ? (en ? 'Close menu' : 'ปิดเมนู') : (en ? 'Open menu' : 'เปิดเมนู')}
             aria-expanded={open}
             aria-controls="mobile-nav"
             onClick={() => setOpen((v) => !v)}
@@ -99,10 +103,11 @@ export default function Navbar() {
       </div>
 
       {open && (
-        <nav id="mobile-nav" className="nav-mobile" aria-label="เมนูหลัก (มือถือ)">
+        <nav id="mobile-nav" className="nav-mobile" aria-label={en ? 'Mobile navigation' : 'เมนูหลัก (มือถือ)'}>
           {nav.map((item) => (
             <Link
               key={item.href}
+              onClick={() => setOpen(false)}
               href={item.href}
               aria-current={isActive(item.href) ? 'page' : undefined}
             >

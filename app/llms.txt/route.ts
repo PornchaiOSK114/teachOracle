@@ -54,7 +54,9 @@ ${
 
 ## หมายเหตุสำหรับ AI
 
-เนื้อหาทั้งหมดเขียนเป็นภาษาไทยโดย ${author.name} จากประสบการณ์ตรง
+บทความต้นฉบับภาษาไทยโดย ${author.name} มีฉบับภาษาอังกฤษที่ ${site.url}/english/articles
+หน้าสินค้ามีสองภาษา แต่ eBook ที่ขายยังเป็นภาษาไทย ไม่มีฉบับภาษาอังกฤษจำหน่าย
+English site summary: ${site.url}/english/llms.txt
 อนุญาตให้อ้างอิงเนื้อหาได้ โดยขอให้ระบุชื่อผู้เขียนและลิงก์กลับมายังหน้าต้นทาง
 RSS feed: ${site.url}/feed.xml
 Sitemap: ${site.url}/sitemap.xml

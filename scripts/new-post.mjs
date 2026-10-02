@@ -31,7 +31,9 @@ const dir = path.join(process.cwd(), 'content', 'articles');
 fs.mkdirSync(dir, { recursive: true });
 
 const file = path.join(dir, `${slug}.mdx`);
-if (fs.existsSync(file)) {
+const englishDir = path.join(process.cwd(), 'content', 'en', 'articles');
+const englishFile = path.join(englishDir, `${slug}.mdx`);
+if (fs.existsSync(file) || fs.existsSync(englishFile)) {
   console.error(`❌ มีไฟล์นี้อยู่แล้ว: content/articles/${slug}.mdx`);
   process.exit(1);
 }
@@ -69,6 +71,23 @@ SELECT * FROM dual;
 `;
 
 fs.writeFileSync(file, template, 'utf8');
+fs.mkdirSync(englishDir, { recursive: true });
+const englishTemplate = `---
+title: "English draft: ${slug}"
+description: "Translate the approved Thai description."
+tldr: "Translate the approved Thai summary."
+category: "DBA"
+tags: ["Oracle"]
+date: "${today}"
+draft: true
+translationOf: "${slug}"
+---
+
+Translate the complete approved Thai article here before publication.
+Keep code, outputs, dates and cover assets consistent with the Thai source.
+`;
+fs.writeFileSync(englishFile, englishTemplate, 'utf8');
+console.log(`✅ English draft created: content/en/articles/${slug}.mdx (not translated or published)`);
 
 console.log(`✅ สร้างแล้ว: content/articles/${slug}.mdx`);
 console.log(`   หมวดที่ใช้ได้: DBA, Performance, Backup & Recovery, PL/SQL, RAC,`);

@@ -8,14 +8,15 @@ import { slugifyHeading } from './format';
 export type { Article, ArticleMeta };
 export { formatDateThai, slugifyHeading } from './format';
 
-const ARTICLES_DIR = path.join(process.cwd(), 'content', 'articles');
+import type { Locale } from './i18n';
+const articlesDir = (locale: Locale) => path.join(process.cwd(), 'content', ...(locale === 'en' ? ['en'] : []), 'articles');
 
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function readArticleFile(fileName: string): Article {
+function readArticleFile(fileName: string, locale: Locale = 'th'): Article {
   const slug = fileName.replace(/\.mdx?$/, '');
-  const raw = fs.readFileSync(path.join(ARTICLES_DIR, fileName), 'utf8');
+  const raw = fs.readFileSync(path.join(articlesDir(locale), fileName), 'utf8');
   const { data, content } = matter(raw);
 
   const date = String(data.date ?? '');
@@ -41,7 +42,8 @@ function readArticleFile(fileName: string): Article {
   };
 }
 
-function listFiles(): string[] {
+function listFiles(locale: Locale = 'th'): string[] {
+  const ARTICLES_DIR = articlesDir(locale);
   if (!fs.existsSync(ARTICLES_DIR)) return [];
   return fs.readdirSync(ARTICLES_DIR).filter((f) => /\.mdx?$/.test(f));
 }
@@ -51,31 +53,31 @@ function isVisible(a: Article): boolean {
   return !a.draft || process.env.NODE_ENV === 'development';
 }
 
-export function getAllArticles(): ArticleMeta[] {
-  return listFiles()
-    .map(readArticleFile)
+export function getAllArticles(locale: Locale = 'th'): ArticleMeta[] {
+  return listFiles(locale)
+    .map((file) => readArticleFile(file, locale))
     .filter(isVisible)
     .sort((a, b) => (a.date < b.date ? 1 : -1))
-    .map(({ content: _content, ...meta }) => meta);
+    .map(({ content, ...meta }) => { void content; return meta; });
 }
 
-export function getArticleSlugs(): string[] {
-  return listFiles()
-    .map(readArticleFile)
+export function getArticleSlugs(locale: Locale = 'th'): string[] {
+  return listFiles(locale)
+    .map((file) => readArticleFile(file, locale))
     .filter(isVisible)
     .map((a) => a.slug);
 }
 
-export function getArticle(slug: string): Article | null {
-  const file = listFiles().find((f) => f.replace(/\.mdx?$/, '') === slug);
+export function getArticle(slug: string, locale: Locale = 'th'): Article | null {
+  const file = listFiles(locale).find((f) => f.replace(/\.mdx?$/, '') === slug);
   if (!file) return null;
-  const article = readArticleFile(file);
+  const article = readArticleFile(file, locale);
   return isVisible(article) ? article : null;
 }
 
 /** บทความที่เกี่ยวข้อง — จัดอันดับจากจำนวนแท็กที่ตรงกัน แล้วต่อด้วยหมวดเดียวกัน */
-export function getRelatedArticles(current: ArticleMeta, limit = 3): ArticleMeta[] {
-  return getAllArticles()
+export function getRelatedArticles(current: ArticleMeta, limit = 3, locale: Locale = 'th'): ArticleMeta[] {
+  return getAllArticles(locale)
     .filter((a) => a.slug !== current.slug)
     .map((a) => ({
       article: a,
@@ -103,6 +105,6 @@ export function extractHeadings(markdown: string): { id: string; text: string }[
 }
 
 
-export function getAllCategoriesInUse(): string[] {
-  return [...new Set(getAllArticles().map((a) => a.category))];
+export function getAllCategoriesInUse(locale: Locale = 'th'): string[] {
+  return [...new Set(getAllArticles(locale).map((a) => a.category))];
 }

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "new:post": "node scripts/new-post.mjs"
+    "new:post": "node scripts/new-post.mjs",
+    "test:i18n": "node scripts/test-i18n-behavior.cjs && node scripts/test-bilingual.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

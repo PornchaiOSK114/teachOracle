@@ -4,7 +4,7 @@ import nextTypeScript from 'eslint-config-next/typescript';
 const eslintConfig = [
   ...nextVitals,
   ...nextTypeScript,
-  { ignores: ['ClaudeDesign/**', '.next/**', 'node_modules/**'] },
+  { ignores: ['ClaudeDesign/**', '.next/**', 'node_modules/**', '.npm-cache/**', 'test-results/**'] },
 ];
 
 export default eslintConfig;

@@ -3,13 +3,16 @@
 import { useMemo, useState } from 'react';
 import type { ArticleMeta } from '@/lib/types';
 import { ALL_CATEGORY } from '@/lib/site';
+import type { Locale } from '@/lib/i18n';
 import ArticleCard from './ArticleCard';
 
 export default function ArticleList({
   articles,
   categories,
+  locale = 'th',
 }: {
   articles: ArticleMeta[];
+  locale?: Locale;
   /** หมวดที่มีบทความอยู่จริงเท่านั้น — ไม่โชว์หมวดว่างเปล่า */
   categories: string[];
 }) {
@@ -34,20 +37,20 @@ export default function ArticleList({
   return (
     <>
       <p className="muted" style={{ margin: '0 0 24px', fontSize: 16 }} aria-live="polite">
-        {filtered.length} บทความ
-        {cat !== ALL_CATEGORY ? ` ในหมวด ${cat}` : ''}
+        {filtered.length} {locale === 'en' ? (filtered.length === 1 ? 'article' : 'articles') : 'บทความ'}
+        {cat !== ALL_CATEGORY ? ` ${locale === 'en' ? 'in' : 'ในหมวด'} ${cat}` : ''}
       </p>
 
       <div style={{ marginBottom: 20 }}>
         <label htmlFor="article-search" className="sr-only">
-          ค้นหาบทความ
+          {locale === 'en' ? 'Search articles' : 'ค้นหาบทความ'}
         </label>
         <input
           id="article-search"
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="ค้นหาบทความ เช่น Execution Plan, RMAN, Index…"
+          placeholder={locale === 'en' ? 'Search Execution Plan, RMAN, Index…' : 'ค้นหาบทความ เช่น Execution Plan, RMAN, Index…'}
           style={{
             width: '100%',
             maxWidth: 460,
@@ -66,7 +69,7 @@ export default function ArticleList({
       <div
         style={{ display: 'flex', flexWrap: 'wrap', gap: 9, marginBottom: 30 }}
         role="group"
-        aria-label="กรองตามหมวดหมู่"
+        aria-label={locale === 'en' ? 'Filter by category' : 'กรองตามหมวดหมู่'}
       >
         {chips.map((name) => (
           <button
@@ -76,7 +79,7 @@ export default function ArticleList({
             aria-pressed={cat === name}
             onClick={() => setCat(name)}
           >
-            {name}
+            {locale === 'en' && name === ALL_CATEGORY ? 'All' : name}
           </button>
         ))}
       </div>
@@ -92,16 +95,16 @@ export default function ArticleList({
           }}
         >
           <p style={{ margin: '0 0 8px', fontWeight: 600, fontSize: 17 }}>
-            ยังไม่มีบทความที่ตรงกับเงื่อนไขนี้
+            {locale === 'en' ? 'No matching articles' : 'ยังไม่มีบทความที่ตรงกับเงื่อนไขนี้'}
           </p>
           <p className="muted" style={{ margin: 0, fontSize: 15 }}>
-            ลองเปลี่ยนหมวดหมู่ หรือล้างคำค้นหาดูครับ
+            {locale === 'en' ? 'Try another category or clear your search.' : 'ลองเปลี่ยนหมวดหมู่ หรือล้างคำค้นหาดูครับ'}
           </p>
         </div>
       ) : (
         <div className="grid-cards">
           {filtered.map((a, i) => (
-            <ArticleCard key={a.slug} article={a} index={i} />
+            <ArticleCard key={a.slug} article={a} index={i} locale={locale} />
           ))}
         </div>
       )}

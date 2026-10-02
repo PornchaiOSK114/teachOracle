@@ -6,10 +6,10 @@ import type { CarouselSlide } from "./SampleCarousel";
 import styles from "./OracleBookLanding.module.css";
 
 /** Public sample pages only. Native dialog supplies focus trapping and Escape. */
-export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
+export default function BookPreview({ slides, locale = "th" }: { slides: CarouselSlide[]; locale?: "th" | "en" }) {
   const groups = [...new Set(slides.map((slide) => slide.group))];
   const [group, setGroup] = useState(
-    groups.includes("ตัวอย่างเนื้อหา") ? "ตัวอย่างเนื้อหา" : groups[0],
+    groups.includes(locale === "en" ? "Sample pages" : "ตัวอย่างเนื้อหา") ? (locale === "en" ? "Sample pages" : "ตัวอย่างเนื้อหา") : groups[0],
   );
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
@@ -45,7 +45,7 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
         <div
           className={styles.filters}
           role="group"
-          aria-label="หมวดหน้าตัวอย่าง"
+          aria-label={locale === 'en' ? 'Sample page categories' : 'หมวดหน้าตัวอย่าง'}
         >
           {groups.map((name) => (
             <button
@@ -61,7 +61,7 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
             </button>
           ))}
         </div>
-        <span className={styles.small}>กดที่หน้าเพื่ออ่านภาพขนาดใหญ่</span>
+        <span className={styles.small}>{locale === 'en' ? 'Select a page to enlarge it' : 'กดที่หน้าเพื่ออ่านภาพขนาดใหญ่'}</span>
       </div>
       <div className={styles.pageGrid}>
         {filtered.map((slide, i) => (
@@ -69,7 +69,7 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
             type="button"
             className={styles.pageButton}
             key={slide.src}
-            aria-label={`ขยายรูป: ${slide.alt}`}
+            aria-label={`${locale === "en" ? "Enlarge" : "ขยายรูป"}: ${slide.alt}`}
             onClick={() => {
               setIndex(i);
               setOpen(true);
@@ -84,7 +84,7 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
                 style={{ objectFit: "contain" }}
               />
               <span className={styles.zoomHint} aria-hidden="true">
-                อ่านหน้านี้ ↗
+                {locale === 'en' ? 'Read this page ↗' : 'อ่านหน้านี้ ↗'}
               </span>
             </span>
             <span className={styles.pageCaption}>
@@ -114,9 +114,9 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="ปิดภาพขยาย"
+            aria-label={locale === 'en' ? 'Close enlarged page' : 'ปิดภาพขยาย'}
           >
-            ปิด ×
+            {locale === 'en' ? 'Close ×' : 'ปิด ×'}
           </button>
         </div>
         {open && (
@@ -134,9 +134,9 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
             type="button"
             disabled={index === 0}
             onClick={() => move(-1)}
-            aria-label="รูปก่อนหน้า"
+            aria-label={locale === 'en' ? 'Previous image' : 'รูปก่อนหน้า'}
           >
-            ← ก่อนหน้า
+            {locale === 'en' ? '← Previous' : '← ก่อนหน้า'}
           </button>
           <span aria-live="polite">
             {index + 1} / {filtered.length}
@@ -145,9 +145,9 @@ export default function BookPreview({ slides }: { slides: CarouselSlide[] }) {
             type="button"
             disabled={index === filtered.length - 1}
             onClick={() => move(1)}
-            aria-label="รูปถัดไป"
+            aria-label={locale === 'en' ? 'Next image' : 'รูปถัดไป'}
           >
-            ถัดไป →
+            {locale === 'en' ? 'Next →' : 'ถัดไป →'}
           </button>
         </div>
       </dialog>

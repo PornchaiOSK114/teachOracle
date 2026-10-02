@@ -1,44 +1,22 @@
 import type { MetadataRoute } from 'next';
 import { getAllArticles } from '@/lib/content';
 import { site, products } from '@/lib/site';
-
+import { localizedPath } from '@/lib/i18n';
 export default function sitemap(): MetadataRoute.Sitemap {
-  const articles = getAllArticles();
-  const latest = articles[0]?.date ? new Date(articles[0].date) : new Date();
-
-  const staticPages: MetadataRoute.Sitemap = [
-    { url: site.url, lastModified: latest, changeFrequency: 'weekly', priority: 1 },
-    {
-      url: `${site.url}/articles`,
-      lastModified: latest,
-      changeFrequency: 'weekly',
-      priority: 0.9,
-    },
-    { url: `${site.url}/courses`, changeFrequency: 'monthly', priority: 0.9 },
-    { url: `${site.url}/about`, changeFrequency: 'monthly', priority: 0.8 },
-    { url: `${site.url}/products`, changeFrequency: 'monthly', priority: 0.9 },
-    { url: `${site.url}/contact`, changeFrequency: 'yearly', priority: 0.7 },
-    /* หน้าที่ URL ถูกพิมพ์ไว้ในหนังสือแล้ว — ต้องมีตลอดไป */
-    { url: `${site.url}/lab`, changeFrequency: 'monthly', priority: 0.7 },
-    { url: `${site.url}/en`, changeFrequency: 'monthly', priority: 0.7 },
-    { url: `${site.url}/en/lab`, changeFrequency: 'monthly', priority: 0.7 },
-  ];
-
-  /* หน้ารายละเอียดสินค้าแต่ละเล่ม — เพิ่มสินค้าใน lib/site.ts แล้ว sitemap อัปเดตเอง */
-  const productPages: MetadataRoute.Sitemap = products.map((p) => ({
-    url: `${site.url}/products/${p.slug}`,
-    changeFrequency: 'monthly' as const,
-    priority: 0.9,
-  }));
-
-  return [
-    ...staticPages,
-    ...productPages,
-    ...articles.map((a) => ({
-      url: `${site.url}/articles/${a.slug}`,
-      lastModified: new Date(a.date),
-      changeFrequency: 'monthly' as const,
-      priority: 0.8,
-    })),
-  ];
+ const entries: MetadataRoute.Sitemap = [];
+ const paths = ['/', '/articles', '/courses', '/about', '/products', '/contact', '/lab', ...products.map(p => '/products/' + p.slug)];
+ const addPair = (path: string, date?: string) => {
+  const languages = { th: site.url + localizedPath(path, 'th'), en: site.url + localizedPath(path, 'en'), 'x-default': site.url + localizedPath(path, 'th') };
+  for (const locale of ['th', 'en'] as const) entries.push({ url: languages[locale], alternates: { languages }, ...(date ? { lastModified: new Date(date) } : {}), changeFrequency: 'weekly', priority: path === '/' ? 1 : 0.8 });
+ };
+ paths.forEach(path => addPair(path));
+ const english = new Set(getAllArticles('en').map(a => a.slug));
+ for (const article of getAllArticles('th')) {
+  if (english.has(article.slug)) addPair('/articles/' + article.slug, article.date);
+  else entries.push({ url: site.url + '/articles/' + article.slug, lastModified: new Date(article.date) });
+ }
+ const thai = new Set(getAllArticles('th').map(a => a.slug));
+ for (const article of getAllArticles('en')) if (!thai.has(article.slug)) entries.push({ url: site.url + '/english/articles/' + article.slug, lastModified: new Date(article.date) });
+ entries.push({ url: site.url + '/en', changeFrequency: 'monthly', priority: 0.5 });
+ return entries;
 }
