@@ -19,7 +19,7 @@ Stripe webhook, Neon, Resend, Blob private, OTP/grant, watermark, download quota
 อย่ารวมเข้า commit เอกสารหรือคืนไฟล์โดยไม่ได้รับคำสั่ง
 Snapshot .agent-handoff/current เดิมเลิกใช้หลังปรับเอกสารชุดนี้; สำเนาก่อนลบเก็บไว้นอก repository
 
-## 2026-10-02 — English website release preparation
+## 2026-10-02 — English website deployed and verified
 
 เจ้าของอนุมัติให้รับงาน Publisher และแก้ทั้ง 5 กลุ่มใน BILINGUAL_REVIEW_2026-10-02.md แล้วเลือก `/english/` สำหรับเว็บไซต์อังกฤษ คง `/en` และ `/en/lab` เป็นหน้าข้อมูลหนังสือเดิม
 
@@ -29,7 +29,11 @@ Snapshot .agent-handoff/current เดิมเลิกใช้หลังป
 - Browser local: desktop 1280×720 และ mobile 390×844; search/filter/no-results, TH↔EN, mobile menu และ light/dark ผ่านในหน้าที่ตรวจ
 - ใช้ Next.js globalNotFound สำหรับ fallback 404 สองภาษา; build ยังมี metadataBase warning ของ internal fallback แต่ HTTP ที่ตรวจไม่พบ localhost metadata ในหน้าสาธารณะและ unmatched 404
 - ไม่ทดสอบเงินจริง ส่ง OTP/อีเมล หรือดาวน์โหลด PDF จริง; Stripe checkout/email locale และ Publisher automation ยังตามระบบเดิม
-- GitHub/deployment/live verification: รอใส่หลักฐานหลังเผยแพร่ ไม่ถือ local build เป็นผล production
+- GitHub main: release commit `6d5f7bf9cf94631ba38ea8d06f8ed9cda646681f` (ตรวจ remote SHA ตรงหลัง push)
+- Vercel production: GitHub deployment `6809924901`, state `success`, ตรง release SHA; [deployment](https://teach-oracle-8bix6tg9j-teenoy.vercel.app) · [Vercel record](https://vercel.com/teenoy/teach-oracle/96BKHTGk8sdjkbN5MaGEoug9cSeF)
+- Live HTTP ที่ `https://teedba.com` ผ่าน 2026-10-02 20:54:23 UTC+7: 23 public pages, 4 private entry pages/noindex, 4 negative routes/404/noindex, feeds/sitemap/llms/OG รวม 6 endpoints, ภาพปก 3 ไฟล์ SHA-256 ตรง source และลิงก์ซื้อ production แสดงจริง ตรวจด้วย GET เท่านั้น
+- Live browser: English home desktop 1280×720, article TH→EN→TH, mobile 390×844 article/menu/product, ไม่มีแนวนอนล้นในหน้าที่ตรวจ, รูปที่โหลดแล้วไม่เสีย, หน้า product ระบุ PDF ภาษาไทยชัดเจน; `/en` ยังเป็น errata พร้อมลิงก์ `/en/lab`
+- หลักฐานหน้าจอเก็บในเครื่องที่ `C:\Users\teeno\.codex\visualizations\2026\10\02\01a0fc9e-e6a3-7953-b47b-18943d84d313\teedba-english-live-desktop.png` และ `teedba-english-live-mobile.png`; HTTP result ใน worktree `test-results/production-smoke.json` (ignored)
 
 คู่มือโครงสร้างและดูแลต่อ: [BILINGUAL_SITE.md](BILINGUAL_SITE.md)
 - Browser local เพิ่มเติม: public sample preview เปิด/เลื่อน/ปิดได้; หน้า product อังกฤษบนมือถือไม่ล้นแนวนอน และแสดงภาษา PDF ชัดเจน

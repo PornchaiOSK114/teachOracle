@@ -74,4 +74,6 @@ Integration worktree: `C:\โปรเจ็คเล่นสนุกของ
 
 Stage exact release paths. Confirm remote main before a non-force push. Existing GitHub-to-Vercel production linkage was verified through GitHub deployment records for base commit `9240a02`. Record the release commit, successful deployment record and real-domain HTTP/browser checks separately in `PROJECT_STATE.md`.
 
+Release `6d5f7bf9cf94631ba38ea8d06f8ed9cda646681f` was pushed to main and deployed successfully on 2026-10-02 (GitHub production deployment `6809924901`). Real-domain GET checks passed at 20:54:23 UTC+7, followed by desktop/mobile browser checks. The public entry point is [teeDBA English](https://teedba.com/english/). Full evidence and boundaries are recorded in `PROJECT_STATE.md`.
+
 Rollback: if public routes, book URLs or delivery entry pages regress, revert the release commit on the current main and verify the replacement deployment and preserved URLs. There is no schema migration to reverse. Do not reset the owner's original working tree.
