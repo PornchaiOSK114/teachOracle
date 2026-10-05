@@ -1,0 +1,69 @@
+---
+title: "How Do an Oracle Database and an Instance Differ? See the Difference in One Diagram"
+description: "Separate an Oracle Database's files from an Instance's memory and processes, then compare their status using v$instance and v$database."
+tldr: "A Database is a set of files. An Instance contains memory and processes that work with those files. Stopping an Instance does not make the files disappear."
+category: "DBA"
+tags: ["Oracle Database vs Instance", "Oracle Instance", "SGA", "Oracle data files", "Oracle DBA basics"]
+date: "2026-10-05"
+draft: false
+cover: "/images/articles/awareness-202609-oracle-database-vs-instance.webp"
+translationOf: "awareness-202609-oracle-database-vs-instance"
+translationSourceSha256: "2c337ad3d42f2b651ec14f1f963e971b8addf9959e7f33b1ca2218fc51adec43"
+---
+
+If the Instance stops running, does the data in the Database disappear too?
+
+No. But the phrase “the Database has stopped” can make it easy to think of the data files and the running components as the same thing. Separate these two parts first, and system status becomes easier to understand.
+
+<Figure src="/images/blog/oracle-database-vs-instance.png" alt="Diagram separating the Instance, which contains the SGA and background processes, from the Database, which contains data files, control files and online redo logs" caption="Running components and database files" />
+
+In this diagram, **Database** means the set of files Oracle uses to store data and manage the database. An **Instance** is the part that starts up to manage those files. It contains shared memory called the SGA (System Global Area) and background processes, which are processes that run in the background.
+
+| If you are looking at... | Think of... | Examples in the diagram |
+|---|---|---|
+| Database | The files the database uses | data files, control files, online redo logs |
+| Instance | The components running and working with the files | SGA, background processes |
+
+A data file stores data. The SGA is memory the Instance uses to do its work, including holding some data temporarily. They are different kinds of storage.
+
+Take a guess first: if the Instance stops, does the data file disappear? The file does not disappear simply because the Instance stops. But ordinary users still cannot access the Database through an Instance that has stopped. The running components must be ready, and the Database must be in a usable state.
+
+## Check the Status of the System You Are Connected To
+
+If you are already connected and your account has permission to read Oracle's status views, try asking about the Instance first.
+
+```sql
+SELECT instance_name, status
+FROM v$instance;
+```
+
+Output from the example system:
+
+```text
+INSTANCE_NAME    STATUS
+---------------- ------------
+cdb              OPEN
+```
+
+`instance_name` gives the Instance name, while `status` in this example is `OPEN`. Then ask about the Database with a separate command.
+
+```sql
+SELECT name, open_mode
+FROM v$database;
+```
+
+Output from the same example system:
+
+```text
+NAME      OPEN_MODE
+--------- --------------------
+CDB       READ WRITE
+```
+
+`name` is the Database name, and `open_mode` shows the mode in which it is open. These two sets of results show the status at the time of the connection and command execution. The names or statuses on your system may differ. If you cannot connect, you cannot use these two commands to check through a normal session either.
+
+There is one more point to remember: this diagram separates the basic components. It does not mean that every Database can have only one Instance. In an Oracle RAC system, one Database may have several Instances working together.
+
+The next time you hear “the Database is unavailable,” try clarifying what that means first: is the connection failing, is the Instance not ready, or is the Database not open yet? Identify exactly what you are seeing, then investigate the cause.
+
+Read more topics in [the Oracle articles on teeDBA.com](https://teedba.com/articles).

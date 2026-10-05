@@ -1,0 +1,67 @@
+---
+title: "Oracle Database กับ Instance ต่างกันอย่างไร? แยกให้เห็นจากภาพเดียว"
+description: "Database กับ Instance เป็นคนละส่วน ดูภาพและผล SQL จริงเพื่อแยกไฟล์ฐานข้อมูลออกจากส่วนที่กำลังทำงาน"
+tldr: "Database คือชุดไฟล์ ส่วน Instance คือหน่วยความจำและ processes ที่ทำงานกับไฟล์; Instance หยุดไม่ได้ทำให้ไฟล์หาย"
+category: "DBA"
+tags: ["Oracle Database กับ Instance", "Oracle Instance", "SGA", "Data file", "พื้นฐาน DBA"]
+date: "2026-10-05"
+draft: false
+cover: "/images/articles/awareness-202609-oracle-database-vs-instance.webp"
+---
+
+ถ้า Instance หยุดทำงาน ข้อมูลใน Database หายไปด้วยไหมครับ?
+
+ไม่หาย แต่คำว่า “Database หยุด” อาจทำให้เผลอคิดว่าไฟล์ข้อมูลกับส่วนที่กำลังทำงานเป็นสิ่งเดียวกัน ลองแยกสองส่วนนี้ก่อน เวลาอ่านสถานะระบบจะเข้าใจง่ายขึ้น
+
+<Figure src="/images/blog/oracle-database-vs-instance.png" alt="แผนภาพแยก Instance ซึ่งมี SGA และ background processes ออกจาก Database ซึ่งมี data files, control files และ online redo logs" caption="ส่วนที่กำลังทำงานกับไฟล์ของฐานข้อมูล" />
+
+ในภาพนี้ **Database** หมายถึงชุดไฟล์ที่ Oracle ใช้เก็บข้อมูลและจัดการฐานข้อมูล ส่วน **Instance** คือส่วนที่เริ่มทำงานขึ้นมาเพื่อจัดการไฟล์เหล่านั้น มีหน่วยความจำร่วมที่เรียกว่า SGA (System Global Area) และ background processes หรือกระบวนการที่ทำงานเบื้องหลัง
+
+| ถ้ากำลังดู... | ให้นึกถึง... | ตัวอย่างในภาพ |
+|---|---|---|
+| Database | ไฟล์ที่ฐานข้อมูลใช้ | data files, control files, online redo logs |
+| Instance | ส่วนที่กำลังทำงานกับไฟล์ | SGA, background processes |
+
+Data file เป็นไฟล์ที่เก็บข้อมูล ส่วน SGA เป็นหน่วยความจำของ Instance ที่ใช้ทำงาน รวมถึงพักข้อมูลบางส่วนไว้ชั่วคราว สองอย่างนี้จึงไม่ใช่ที่เก็บชนิดเดียวกันครับ
+
+ลองทายก่อน: ถ้า Instance หยุด data file จะหายไหม? ไฟล์ไม่ได้หายไปเพียงเพราะ Instance หยุด แต่ผู้ใช้ทั่วไปก็ยังเข้าใช้ Database ผ่าน Instance ที่หยุดอยู่ไม่ได้ ต้องมีส่วนที่ทำงานพร้อมและ Database อยู่ในสถานะที่ใช้งานได้
+
+## ลองดูสถานะจากระบบที่เชื่อมต่ออยู่
+
+ถ้าคุณเชื่อมต่อได้แล้วและบัญชีมีสิทธิ์อ่านมุมมองสถานะของ Oracle ลองถามเรื่อง Instance ก่อน
+
+```sql
+SELECT instance_name, status
+FROM v$instance;
+```
+
+ผลจากระบบตัวอย่าง
+
+```text
+INSTANCE_NAME    STATUS
+---------------- ------------
+cdb              OPEN
+```
+
+`instance_name` บอกชื่อ Instance ส่วน `status` ในตัวอย่างเป็น `OPEN` จากนั้นถามเรื่อง Database แยกอีกคำสั่ง
+
+```sql
+SELECT name, open_mode
+FROM v$database;
+```
+
+ผลจากระบบตัวอย่างเดียวกัน
+
+```text
+NAME      OPEN_MODE
+--------- --------------------
+CDB       READ WRITE
+```
+
+`name` คือชื่อ Database และ `open_mode` บอกโหมดที่เปิดอยู่ ผลสองชุดนี้เป็นสถานะ ณ ตอนที่เชื่อมต่อและรันคำสั่ง ชื่อหรือสถานะในระบบของคุณอาจต่างออกไป ถ้าเชื่อมต่อไม่ได้ ก็ใช้สองคำสั่งนี้ตรวจจาก session ปกติไม่ได้เช่นกัน
+
+มีข้อควรจำอีกอย่าง: ภาพนี้ใช้แยกส่วนประกอบพื้นฐาน ไม่ได้บอกว่าทุก Database มีได้แค่หนึ่ง Instance ในระบบ Oracle RAC หนึ่ง Database อาจมีหลาย Instance ทำงานร่วมกัน
+
+ครั้งหน้าที่ได้ยินว่า “Database ใช้ไม่ได้” ลองถามให้ชัดก่อนครับว่าเชื่อมต่อไม่ได้, Instance ยังไม่พร้อม หรือ Database ยังไม่เปิด แยกสิ่งที่เห็นให้ตรง แล้วค่อยหาสาเหตุต่อ
+
+อ่านหัวข้ออื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)
