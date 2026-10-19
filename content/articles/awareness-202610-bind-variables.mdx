@@ -1,0 +1,125 @@
+---
+title: "Bind Variable คืออะไร ทำไมควรแยกค่าออกจากข้อความ SQL?"
+description: "ทดลองใช้ bind variable กับ SQL สั้น ๆ แล้วดูเหตุผลเรื่อง cursor reuse, parse และขอบเขตด้านความปลอดภัย"
+tldr: "ส่งค่าผ่าน bind API เพื่อให้ SQL text คงเดิมและมีโอกาสใช้ cursor ซ้ำ; วัดผลจริงก่อนสรุปว่าเร็วขึ้น"
+category: "Performance"
+tags: ["Oracle bind variable", "bind variables", "hard parse", "cursor reuse", "SQL injection"]
+date: "2026-10-19"
+draft: false
+cover: "/images/articles/awareness-202610-bind-variables.webp"
+---
+
+SQL สองคำสั่งที่ต่างกันแค่ตัวเลขเงื่อนไข Oracle จะมองว่าเป็นคำสั่งคนละชุดกันหรือไม่? บทความนี้จะพามาลองรันคำสั่งด้วย Bind Variable พร้อมเจาะดูหลักฐานจริงใน Cursor ที่ฐานข้อมูลเก็บไว้ครับ
+
+**Bind Variable** คือช่องรับตัวแปร (Placeholder) ที่ส่งแยกออกจากข้อความ SQL ค่าของข้อมูลที่เปลี่ยนไปจึงไม่ต้องถูกนำไปต่อสายข้อความ (Concatenate) เข้ากับคำสั่ง SQL โดยตรง เราจะสร้างตารางทดลองเล็ก ๆ เพื่อตรวจผลลัพธ์ไปพร้อมกันครับ
+
+---
+
+<Figure src="/images/blog/cover-concept.png" alt="แยกข้อความ SQL ออกจากค่าที่ส่งให้ bind variable" />
+
+*ภาพอธิบายแนวคิด: แยกข้อความ SQL ออกจากค่าที่ส่งให้ bind variable*
+
+## ขั้นที่ 1: เตรียมข้อมูลทดลอง
+
+รันชุดคำสั่งนี้ครั้งเดียวใน Schema ทดลอง:
+
+~~~sql
+CREATE TABLE kb_bind_orders (
+    order_id NUMBER PRIMARY KEY,
+    customer_id NUMBER NOT NULL
+);
+
+INSERT INTO kb_bind_orders VALUES (101, 120);
+INSERT INTO kb_bind_orders VALUES (102, 121);
+COMMIT;
+~~~
+
+ข้อมูลสมมติ: คำสั่งซื้อ `101` เป็นของลูกค้า `120` ส่วนคำสั่งซื้อ `102` เป็นของลูกค้า `121` ต่อไปเราจะเปลี่ยนเงื่อนไขการค้นหาโดยใช้ข้อความ `SELECT` ชุดเดิม
+
+---
+
+## ขั้นที่ 2: รันคำสั่งด้วย Bind Variable
+
+ตัวอย่างนี้ใช้คำสั่ง `VARIABLE` และ `EXEC` ของ SQL*Plus เพื่อกำหนดค่า Bind (ในแอปพลิเคชันจริงจะใช้ Bind API ของ Driver เช่น JDBC/ODBC แทน) ส่วนข้อความ Comment ใน `SELECT` มีไว้ระบุคำสั่งเพื่อความสะดวกในการตรวจค้นใน `V$SQL`
+
+~~~sql
+VARIABLE customer_id NUMBER
+
+-- กำหนดค่า Bind เป็น 120 แล้วรันครั้งที่ 1
+EXEC :customer_id := 120
+SELECT /* KBMKT_BIND_20261014 */ order_id, customer_id
+FROM kb_bind_orders
+WHERE customer_id = :customer_id;
+~~~
+
+~~~text
+PL/SQL procedure successfully completed.
+
+    ORDER_ID  CUSTOMER_ID
+------------ ------------
+         101          120
+
+1 row selected.
+~~~
+
+ผลลัพธ์ครั้งแรกได้แถว `101, 120` จากนั้นลองเปลี่ยนค่า Bind เป็น `121` แล้วรัน `SELECT` ด้วยข้อความเดิมอีกครั้ง:
+
+~~~sql
+-- เปลี่ยนค่า Bind เป็น 121 แล้วรันครั้งที่ 2
+EXEC :customer_id := 121
+SELECT /* KBMKT_BIND_20261014 */ order_id, customer_id
+FROM kb_bind_orders
+WHERE customer_id = :customer_id;
+~~~
+
+~~~text
+PL/SQL procedure successfully completed.
+
+    ORDER_ID  CUSTOMER_ID
+------------ ------------
+         102          121
+
+1 row selected.
+~~~
+
+ครั้งนี้ได้ผลลัพธ์เป็น `102, 121` โดยที่ข้อความคำสั่ง `SELECT` ที่ส่งไปยังฐานข้อมูลยังคงเป็นข้อความเดิมทุกประการ
+
+---
+
+## ขั้นที่ 3: ตรวจหลักฐานการใช้ Cursor ซ้ำใน Shared Pool
+
+เราสามารถตรวจสอบการทำงานเบื้องหลังของ Oracle ผ่านการคิวรี `V$SQL` (หมายเหตุ: บัญชีผู้ใช้ทั่วไปอาจต้องขอสิทธิ์จาก DBA ในการอ่าน View นี้):
+
+~~~sql
+SELECT sql_id, child_number, executions
+FROM v\$sql
+WHERE sql_text LIKE 'SELECT /* KBMKT_BIND_20261014 */%';
+~~~
+
+~~~text
+SQL_ID        CHILD_NUMBER   EXECUTIONS
+------------- ------------ ------------
+2haczp9uf2020            0            2
+
+1 row selected.
+~~~
+
+**วิเคราะห์ผลลัพธ์:**
+เราพบ `CHILD_NUMBER` หมายเลข `0` ของ `SQL_ID` ดังกล่าว มีจำนวน `EXECUTIONS` เท่ากับ `2` นี่คือหลักฐานยืนยันว่าคำสั่ง SQL นี้ถูกรันซ้ำ 2 ครั้งผ่าน Cursor เดียวกันใน Shared Pool
+
+**ทำไมเรื่องนี้ถึงสำคัญ?**
+ก่อนจะประมวลผลคำสั่ง SQL ระบบ Oracle จะต้องทำการ **Parse** เพื่อตรวจสอบรูปแบบภาษา (Syntax), ชื่อวัตถุและสิทธิ์เข้าถึง (Semantics) รวมถึงการคำนวณสร้างแผนการประมวลผล (Execution Plan) 
+* **Hard Parse:** หากเป็นคำสั่งใหม่ที่ไม่เคยเจอ ฐานข้อมูลต้องประมวลผลใหม่ทั้งหมด ซึ่งกินพลังงาน CPU และทรัพยากรใน Shared Pool สูงมาก
+* **Soft Parse:** หากใช้ Bind Variable ข้อความ SQL จะเหมือนเดิมทุกประการ ทำให้ Oracle ตรวจเจอ Cursor เดิมใน Shared Pool และดึง Execution Plan มาใช้ซ้ำได้ทันที ลดภาระของระบบได้อย่างมหาศาล
+
+---
+
+## ขั้นที่ 4: ใช้ Bind Variable ให้ถูกหน้าที่และปลอดภัย
+
+1. **ลดความเสี่ยง SQL Injection:** การใช้ Bind API อย่างถูกต้องจะช่วยให้ฐานข้อมูลมองค่าที่ส่งมาเป็น "ข้อมูล" (Data) เสมอ ไม่ว่าข้อมูลนั้นจะมีอักขระพิเศษใด ๆ ก็จะไม่ถูกนำไปตีความหรือประมวลผลเป็น "โค้ดคำสั่ง" (Executable Code)
+2. **ข้อจำกัดที่ต้องระวัง:** Bind Variable ใช้แทนได้เฉพาะ **ค่าของข้อมูล (Literals)** ในเงื่อนไขเท่านั้น ไม่สามารถใช้แทนชื่อตาราง (Table Name) หรือชื่อคอลัมน์ (Column Name) ได้ หากแอปพลิเคชันจำเป็นต้องให้ผู้ใช้เลือกชื่อ Object แบบ Dynamic จะต้องใช้วิธี Whitelist เพื่อตรวจสอบความถูกต้องของชื่อ Object ก่อนเสมอ
+
+**คำแนะนำ:** ลองเริ่มตรวจสอบจาก SQL ที่มีการรันซ้ำบ่อย ๆ ในระบบ แยกส่วนของค่าข้อมูลออกจากข้อความ SQL ให้ชัดเจน เพื่อลดงาน Hard Parse และช่วยให้ระบบตอบสนองได้อย่างมีประสิทธิภาพสูงสุดครับ
+
+
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)
