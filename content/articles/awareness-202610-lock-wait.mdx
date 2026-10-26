@@ -1,0 +1,156 @@
+---
+title: "UPDATE ค้างอยู่: จะรู้ได้อย่างไรว่ากำลังรอ Lock?"
+description: "แยก session ที่รอกับ session ที่ถือ row lock และดูหลักฐานที่ DBA ควรเก็บก่อนจัดการ session"
+tldr: "UPDATE แถวที่ถูก transaction อื่นแก้ไว้อาจรอ; ตรวจ blocker และธุรกรรมก่อนตัดสินใจ"
+category: "Performance"
+tags: ["Oracle blocking session", "Oracle row lock", "V$SESSION", "lock wait", "UPDATE"]
+date: "2026-10-26"
+draft: false
+cover: "/images/articles/awareness-202610-lock-wait.webp"
+---
+
+สั่งคำสั่ง `UPDATE` แล้วหน้าจอค้างไม่คืนผลลัพธ์ แต่ก็ไม่มีข้อผิดพลาด (Error) แสดงขึ้นมา ปัญหานี้เกิดจากคำสั่งของเรากำลังจอดรอ Lock จากเซสชันอื่นอยู่หรือเปล่า? บทความนี้จะพามาจำลองสถานการณ์จริง โดยให้ Session A ถือ Lock บนแถวข้อมูลไว้ แล้วให้ Session B พยายามแก้ข้อมูลแถวเดียวกัน เพื่อจับหลักฐานและดูพฤติกรรมของฐานข้อมูลขณะเกิดการค้างครับ
+
+**Row Lock (Exclusive Lock):** คือกลไกของฐานข้อมูลที่ป้องกันไม่ให้สอง ทรานแซกชัน (Transaction) เข้าไปแก้ไขข้อมูลในแถวเดียวกันพร้อม ๆ กัน โดยเซสชันที่เริ่มแก้ไขข้อมูลก่อนจะถือ Lock ไว้จนกว่าจะจบ Transaction ด้วยคำสั่ง `COMMIT` หรือ `ROLLBACK`
+
+---
+
+<Figure src="/images/blog/awareness-202610-lock-wait/cover-concept.png" alt="B ที่แก้แถวเดียวกันรอ A จบ transaction; Lab นี้ใช้ COMMIT เพื่อปล่อยให้ B ทำต่อ" />
+
+*ภาพอธิบายแนวคิด: B ที่แก้แถวเดียวกันรอ A จบ transaction; Lab นี้ใช้ COMMIT เพื่อปล่อยให้ B ทำต่อ*
+
+## ขั้นที่ 1: เตรียมตารางและข้อมูลทดลอง
+
+รันชุดคำสั่งนี้ใน Schema ทดลองเพื่อเตรียมแถวข้อมูล:
+
+```sql
+CREATE TABLE kb_lock_orders (
+    order_id NUMBER PRIMARY KEY,
+    status VARCHAR2(20)
+);
+
+INSERT INTO kb_lock_orders VALUES (10, 'PENDING');
+COMMIT;
+```
+
+---
+
+## ขั้นที่ 2: จำลองสถานการณ์การแย่งชิง Lock (Lock Contention)
+
+**เปิด Session A:** สั่งอัปเดตสถานะของออเดอร์หมายเลข `10` แต่ **ยังไม่สั่ง COMMIT**
+
+```sql
+UPDATE kb_lock_orders SET status = 'PAID' WHERE order_id = 10;
+```
+
+```text
+1 row updated.
+```
+
+Session A ทำการอัปเดตสำเร็จและถือ Row Lock ไว้ จากนั้นให้ **เปิด Session B** แล้วสั่งอัปเดตข้อมูลในแถวเดียวกัน:
+
+```sql
+UPDATE kb_lock_orders SET status = 'SHIPPED' WHERE order_id = 10;
+```
+
+**สิ่งที่เกิดขึ้นกับ Session B:**  
+หน้าจอของ Session B จะค้างนิ่งและยังไม่คืนผลลัพธ์ว่าแก้ไขสำเร็จ เนื่องจากต้องจอดรอให้ Session A จบ Transaction เสียก่อน
+
+---
+
+## ขั้นที่ 3: ตรวจสอบหลักฐานการรอจาก V\$SESSION
+
+เปิด **Session DBA** ขึ้นมาคิวรีดูสถานะของ Session ที่กำลังค้างอยู่ในระบบ:
+
+```sql
+SELECT sid, blocking_session, event
+FROM v$session
+WHERE username = 'KB_MKT_LAB_20261014_R2' 
+  AND state = 'WAITING'
+  AND event = 'enq: TX - row lock contention';
+```
+
+```text
+       SID BLOCKING_SESSION EVENT
+---------- ---------------- -----------------------------------
+        68              287 enq: TX - row lock contention
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**
+* `SID 68` (Session B) คือฝั่งที่กำลังนั่งรอ
+* `BLOCKING_SESSION 287` (Session A) คือตัวการที่ถือ Lock ค้างไว้
+* `EVENT = enq: TX - row lock contention` คือหลักฐานยืนยันว่าเกิดการรอคอยเนื่องจากแย่งชิง Row Lock กัน
+
+---
+
+### ทดสอบเพิ่มเติม: การอ่านข้อมูลของ Session C (Read Consistency)
+
+หากเปิด **Session C** ขึ้นมาเพื่อคิวรีอ่านข้อมูลตารางนี้ตามปกติ ขณะที่ Session A ยังไม่ได้ `COMMIT`:
+
+```sql
+SELECT status FROM kb_lock_orders WHERE order_id = 10;
+```
+
+```text
+STATUS
+--------------------
+PENDING
+
+1 row selected.
+```
+
+**ผลลัพธ์:** Session C สามารถอ่านค่า `'PENDING'` ซึ่งเป็นสถานะเดิมที่ Commit ไว้ล่าสุดได้ทันทีโดยไม่ติดบล็อกใด ๆ นี่คือคุณสมบัติ **Read Consistency** ของ Oracle ที่ใช้ข้อมูลจาก Undo Segment ทำให้คำสั่ง `SELECT` อ่านข้อมูลได้เสมอโดยไม่ต้องรอคำสั่ง `UPDATE`
+
+---
+
+<Figure src="/images/blog/awareness-202610-lock-wait/reader-writer.png" alt="ขณะ A ยังไม่ commit นั้น B รอแก้แถวเดียวกัน แต่ SELECT ปกติของ C อ่านค่า PENDING ที่ commit แล้วได้" />
+
+*ภาพอธิบายแนวคิด: ขณะ A ยังไม่ commit นั้น B รอแก้แถวเดียวกัน แต่ SELECT ปกติของ C อ่านค่า PENDING ที่ commit แล้วได้*
+
+## ขั้นที่ 4: ปลด Lock ใน Session A และดูผลลัพธ์ใน Session B
+
+สลับกลับไปที่ **Session A** แล้วสั่งจบ Transaction:
+
+```sql
+COMMIT;
+```
+
+```text
+Commit complete.
+```
+
+ทันทีที่ Session A สั่ง `COMMIT` คำสั่ง `UPDATE` ใน **Session B** ที่เคยค้างอยู่จะทำงานต่อสำเร็จทันที:
+
+```text
+1 row updated.
+```
+
+จากนั้นสลับไปตรวจสอบผลลัพธ์และสั่ง `COMMIT` ใน **Session B**:
+
+```sql
+SELECT status FROM kb_lock_orders WHERE order_id = 10;
+COMMIT;
+```
+
+```text
+STATUS
+--------------------
+SHIPPED
+
+1 row selected.
+
+Commit complete.
+```
+
+**สรุป:** สถานะสุดท้ายกลายเป็น `'SHIPPED'` ตามคำสั่งของ Session B ซึ่งแสดงว่าคำสั่งที่ค้างอยู่นั้นไม่ได้สูญหายไปไหน เพียงแค่รอคอยลำดับการทำงานเท่านั้น
+
+---
+
+## ข้อคิดสำหรับการบริหารจัดการระบบ (DBA Best Practices)
+
+1. **อย่าเพิ่งรีบ Kill Session:** คำว่า "คำสั่งค้าง" เพียงอย่างเดียวไม่เพียงพอที่จะตัดสินใจสั่ง `KILL SESSION`
+2. **ตรวจสอบให้ครบวงจร:** ก่อนจะยกเลิกการทำงานของ Session ใด ๆ DBA ควรตรวจสอบทั้งฝั่งผู้รอ (`SID`), ผู้ถือ Lock (`BLOCKING_SESSION`) และตรวจสอบคำสั่ง SQL ที่ Session ต้นเหตุทำค้างไว้ เพื่อประเมินผลกระทบต่อธุรกิจก่อนเสมอครับ
+
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)

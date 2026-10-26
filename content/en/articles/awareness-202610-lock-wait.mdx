@@ -1,0 +1,158 @@
+---
+title: "UPDATE Is Stuck: How Can You Tell Whether It Is Waiting for a Lock?"
+description: "You run an UPDATE, but the screen seems frozen. No result comes back, and no error appears. Could your statement be waiting for a lock held by another session? In this article, we will reproduce the situation by having Session A hold a lock on a row while Session B tries to update the same row. We will then collect evidence and observe how the database behaves while the statement is waiting."
+tldr: "You run an UPDATE, but the screen seems frozen. No result comes back, and no error appears. Could your statement be waiting for a lock held by another session? In this article, we will reproduce the situation by having Session A hold a lock on a row while Session B tries to update the same row. We will then collect evidence and observe how the database behaves while the statement is waiting."
+category: "Performance"
+tags: []
+date: "2026-10-26"
+draft: false
+cover: "/images/articles/awareness-202610-lock-wait.webp"
+translationOf: "awareness-202610-lock-wait"
+translationSourceSha256: "635e5df807747451b69369a35e24102e9b26de058e05daf54b47994c5e015971"
+---
+
+You run an `UPDATE`, but the screen seems frozen. No result comes back, and no error appears. Could your statement be waiting for a lock held by another session? In this article, we will reproduce the situation by having Session A hold a lock on a row while Session B tries to update the same row. We will then collect evidence and observe how the database behaves while the statement is waiting.
+
+**Row Lock (Exclusive Lock):** This database mechanism prevents two transactions from modifying the same row at the same time. The session that starts modifying the row first holds the lock until it ends its transaction with `COMMIT` or `ROLLBACK`.
+
+---
+
+<Figure src="/images/blog/awareness-202610-lock-wait/cover-concept.png" alt="B waits to update the same row until A ends its transaction; this lab uses COMMIT to let B continue" />
+
+*Concept illustration: B waits to update the same row until A ends its transaction; this lab uses COMMIT to let B continue.*
+
+## Step 1: Prepare the Test Table and Data
+
+Run these statements in a test schema to prepare the row:
+
+```sql
+CREATE TABLE kb_lock_orders (
+    order_id NUMBER PRIMARY KEY,
+    status VARCHAR2(20)
+);
+
+INSERT INTO kb_lock_orders VALUES (10, 'PENDING');
+COMMIT;
+```
+
+---
+
+## Step 2: Reproduce Lock Contention
+
+**Open Session A:** Update the status of order `10`, but **do not issue COMMIT yet**.
+
+```sql
+UPDATE kb_lock_orders SET status = 'PAID' WHERE order_id = 10;
+```
+
+```text
+1 row updated.
+```
+
+Session A completes its update and holds the row lock. Next, **open Session B** and update the same row:
+
+```sql
+UPDATE kb_lock_orders SET status = 'SHIPPED' WHERE order_id = 10;
+```
+
+**What happens in Session B:**  
+Session B appears frozen and does not yet return a message confirming that the update succeeded. It has to wait for Session A to end its transaction first.
+
+---
+
+## Step 3: Check V$SESSION for Evidence of the Wait
+
+Open a **DBA session** and query the status of the session that is currently waiting:
+
+```sql
+SELECT sid, blocking_session, event
+FROM v$session
+WHERE username = 'KB_MKT_LAB_20261014_R2' 
+  AND state = 'WAITING'
+  AND event = 'enq: TX - row lock contention';
+```
+
+```text
+       SID BLOCKING_SESSION EVENT
+---------- ---------------- -----------------------------------
+        68              287 enq: TX - row lock contention
+
+1 row selected.
+```
+
+**Interpreting the results:**
+* `SID 68` (Session B) is the waiting session.
+* `BLOCKING_SESSION 287` (Session A) identifies the session holding the lock.
+* `EVENT = enq: TX - row lock contention` confirms that the session is waiting because of row lock contention.
+
+---
+
+### Additional Test: Reading Data in Session C (Read Consistency)
+
+Open **Session C** and run a normal query against this table while Session A has not yet issued `COMMIT`:
+
+```sql
+SELECT status FROM kb_lock_orders WHERE order_id = 10;
+```
+
+```text
+STATUS
+--------------------
+PENDING
+
+1 row selected.
+```
+
+**Result:** Session C immediately reads `'PENDING'`, the last committed status, without being blocked. This is Oracle's **Read Consistency** feature. It uses data from the undo segment so that a `SELECT` can always read data without waiting for an `UPDATE`.
+
+---
+
+<Figure src="/images/blog/awareness-202610-lock-wait/reader-writer.png" alt="While A has not yet committed, B waits to update the same row, but C's normal SELECT can read the committed value PENDING" />
+
+*Concept illustration: While A has not yet committed, B waits to update the same row, but C's normal SELECT can read the committed value PENDING.*
+
+## Step 4: Release the Lock in Session A and Observe the Result in Session B
+
+Switch back to **Session A** and end the transaction:
+
+```sql
+COMMIT;
+```
+
+```text
+Commit complete.
+```
+
+As soon as Session A issues `COMMIT`, the `UPDATE` that was waiting in **Session B** immediately resumes and completes successfully:
+
+```text
+1 row updated.
+```
+
+Then switch to **Session B**, check the result, and issue `COMMIT`:
+
+```sql
+SELECT status FROM kb_lock_orders WHERE order_id = 10;
+COMMIT;
+```
+
+```text
+STATUS
+--------------------
+SHIPPED
+
+1 row selected.
+
+Commit complete.
+```
+
+**Summary:** The final status is `'SHIPPED'`, as specified by Session B's statement. The waiting statement was not lost. It was simply waiting for its turn to run.
+
+---
+
+## Practical Considerations for DBAs (DBA Best Practices)
+
+1. **Do not rush to kill a session:** A report that a statement is “stuck” is not enough on its own to justify issuing `KILL SESSION`.
+2. **Check the full picture:** Before terminating any session, a DBA should always examine the waiting session (`SID`), the session holding the lock (`BLOCKING_SESSION`), and the SQL statement left unfinished in the blocking session to assess the business impact.
+
+Read more Oracle topics in the [Oracle articles on teeDBA.com](https://teedba.com/articles).
