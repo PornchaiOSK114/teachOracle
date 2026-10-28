@@ -1,0 +1,93 @@
+---
+title: "ต่อ Oracle ไม่ได้: Host, Port และ Service Name ต้องตรวจตรงไหน?"
+description: "แยก Host, Port และ Service Name ใน Oracle Easy Connect พร้อมลำดับตรวจเมื่อ client เชื่อมต่อไม่ได้"
+tldr: "ตรวจ host, listener port และ service name แยกกัน พร้อมแนบ error เต็มโดยไม่ส่ง password"
+category: "DBA"
+tags: ["Oracle connection host port service name", "Easy Connect", "Oracle listener", "tnsnames.ora", "SQL*Plus"]
+date: "2026-10-28"
+draft: false
+cover: "/images/articles/awareness-202610-oracle-network-connect.webp"
+---
+
+เชื่อมต่อ Oracle Database ไม่ได้ ทั้งที่ใช้ข้อมูลเดิมที่เคยใช้ เกิดจากสาเหตุอะไร และต้องส่งข้อมูลอะไรให้ DBA ช่วยตรวจสอบบ้าง? บทความนี้จะพามาแยกแยะความหมายของ Host, Port และ Service Name พร้อมใช้คำสั่ง SQL จากเซสชันที่ทำงานได้เพื่อยืนยันบริการฝั่งฐานข้อมูลครับ
+
+**องค์ประกอบสำคัญของการเชื่อมต่อ:**
+* **Host:** หมายเลข IP หรือ Hostname ปลายทางของเซิร์ฟเวอร์ฐานข้อมูลในระบบเครือข่าย
+* **Port:** ช่องทางที่ Listener ของ Oracle คอยรับฟังคำขอเชื่อมต่อ (ปกติคือ Port 1521)
+* **Service Name:** ชื่อบริการของฐานข้อมูลหรือ Pluggable Database (PDB) ที่ขอเข้าใช้งาน
+* **TNS Alias:** ชื่อย่อที่ตั้งขึ้นในไฟล์ `tnsnames.ora` บนเครื่อง Client ซึ่งไม่จำเป็นต้องชื่อเหมือนกับ Service Name บนฐานข้อมูล
+
+---
+
+<Figure src="/images/blog/awareness-202610-oracle-network-connect/cover-concept.png" alt="Host และ port ระบุจุดติดต่อ listener ส่วน service name ระบุบริการที่ต้องการเชื่อมต่อ ภาพย่อขั้นตอนการสร้าง connection" />
+
+*ภาพอธิบายแนวคิด: Host และ port ระบุจุดติดต่อ listener ส่วน service name ระบุบริการที่ต้องการเชื่อมต่อ ภาพย่อขั้นตอนการสร้าง connection*
+
+## ขั้นที่ 1: ระบุและจับคู่ค่าที่ต้องเปรียบเทียบ
+
+ในสภาพแวดล้อมจริง เช่น การตั้งชื่อ Alias ในไฟล์ `tnsnames.ora` ว่า `PROD` เพื่ออ้างอิงไปยัง Service Name ชื่อ `prod` แม้ชื่อทั้งสองจะดูคล้ายกัน แต่มันทำคนละหน้าที่กัน เราจึงต้องตรวจสอบการจับคู่ (Mapping) ค่าจริงของระบบเสมอ โดยไม่คาดเดาจากชื่อ Alias เพียงอย่างเดียว
+
+---
+
+## ขั้นที่ 2: ตรวจสอบ Service ที่ฐานข้อมูลเปิดให้บริการ
+
+ฝั่ง DBA สามารถตรวจสอบรายการ Service ทั้งหมดที่เปิดใช้งานอยู่ภายใน PDB ได้ด้วยคำสั่ง:
+
+```sql
+SELECT name, network_name, pdb 
+FROM v$services 
+ORDER BY name;
+```
+
+```text
+NAME                      NETWORK_NAME                   PDB
+------------------------- ------------------------------ ---------------
+prod                      prod                           PROD
+
+1 row selected.
+```
+
+**ผลลัพธ์:** แสดงชื่อ Service และ `NETWORK_NAME` เป็น `prod` ซึ่งผูกอยู่กับ PDB ชื่อ `PROD` ค่าเหล่านี้คือข้อมูลจริงที่ต้องนำไปใช้เปรียบเทียบกับค่า `SERVICE_NAME` ที่กำหนดในแอปพลิเคชัน
+
+---
+
+## ขั้นที่ 3: ตรวจสอบบริบทของ Session ที่ใช้งานได้จริง
+
+หากมีเซสชันใดเซสชันหนึ่งเชื่อมต่อได้สำเร็จ สามารถตรวจสอบบริบทสภาพแวดล้อม (Session Context) ด้วยคำสั่ง:
+
+```sql
+SELECT sys_context('USERENV','SESSION_USER') AS session_user,
+       sys_context('USERENV','SERVICE_NAME') AS service_name,
+       sys_context('USERENV','CON_NAME') AS con_name
+FROM dual;
+```
+
+```text
+SESSION_USER             SERVICE_NAME         CON_NAME
+------------------------ -------------------- ------------
+KB_MKT_LAB_20261014_R2   prod                 PROD
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**
+* `SERVICE_NAME` = `prod`
+* `CON_NAME` = `PROD` (ระบุชื่อ PDB)
+* `SESSION_USER` = แสดงชื่อ Schema User ที่ใช้อยู่
+
+**ประโยชน์:** หากแอปพลิเคชันเชื่อมต่อสำเร็จแต่พบข้อมูลไม่ครบหรือมองไม่เห็นตาราง การตรวจสองค่านั้นจะช่วยตัดประเด็นเรื่อง "เชื่อมต่อผิด PDB" หรือ "ต่อผิด Service" ออกไปได้ก่อนทันที  
+*(ข้อควรระวัง: ผลลัพธ์นี้ยืนยันเฉพาะเซสชันปัจจุบันที่รันคิวรีสำเร็จเท่านั้น ไม่ได้เป็นหลักฐานยืนยันเส้นทางเครือข่ายของ Client เครื่องอื่นที่ยังต่อไม่ผ่าน)*
+
+---
+
+## ขั้นที่ 4: การแจ้งปัญหาแก่ DBA อย่างมีประสิทธิภาพ
+
+เมื่อ Client ยังไม่สามารถเชื่อมต่อฐานข้อมูลได้ ย่อมไม่สามารถรันคำสั่ง SQL เพื่อตรวจสอบได้ ให้ผู้ดูแลระบบใช้เซสชันฝั่งที่เข้าถึงได้ตรวจสอบ Service แล้วนำมาเปรียบเทียบกับค่า Host, Port, TNS Alias และข้อความ Error เต็มที่เกิดขึ้นบนเครื่องที่มีปัญหา
+
+**คำแนะนำในการแจ้งปัญหา:**
+1. **ระบุข้อมูลให้ครบถ้วน:** ระบุ TNS Alias หรือ Service Name ที่ใช้, เวลาที่เกิดปัญหา, ชื่อโปรแกรม/แอปพลิเคชันต้นทาง และข้อความ Error แบบเต็ม (เช่น `ORA-12154` หรือ `ORA-12514`)
+2. **อย่าสับสนระหว่างศัพท์เทคนิค:** SID, Instance Name และ Service Name มีความหมายต่างกันและใช้แทนกันไม่ได้
+3. **ข้อควรระวังด้านความปลอดภัย:** **ห้าม** แนบรหัสผ่าน (Password) มาในตั๋วแจ้งปัญหาหรือช่องทางแชทโดยเด็ดขาดครับ
+
+
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)
