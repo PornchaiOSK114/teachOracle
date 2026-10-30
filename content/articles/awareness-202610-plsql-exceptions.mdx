@@ -1,0 +1,119 @@
+---
+title: "PL/SQL ไม่ฟ้อง Error เพราะเราเผลอซ่อนมันไว้หรือเปล่า?"
+description: "ดูว่า WHEN OTHERS อาจซ่อน error ใน PL/SQL ได้อย่างไร และส่งต่อข้อผิดพลาดให้ผู้เรียกเห็นด้วย RAISE"
+tldr: "อย่าปล่อย WHEN OTHERS จบด้วย NULL; จัดการสิ่งที่จำเป็นแล้วส่ง exception ต่อ"
+category: "PL/SQL"
+tags: ["PL/SQL WHEN OTHERS", "PL/SQL exception handler", "RAISE", "SQLERRM", "error handling"]
+date: "2026-10-30"
+draft: false
+cover: "/images/articles/awareness-202610-plsql-exceptions.webp"
+---
+
+# PL/SQL ไม่ฟ้อง Error เพราะเราเผลอซ่อนมันไว้หรือเปล่า?
+
+
+PL/SQL แจ้งว่าประมวลผลสำเร็จ แต่ข้างในทำงานผิดพลาดหรือเกิดข้อผิดพลาดค้างอยู่ได้หรือไม่? คำตอบคือ **"ได้"** หากในโค้ดมี Exception Handler คอยรับข้อผิดพลาดแล้วปล่อยให้ Block ทำงานจบเงียบ ๆ บทความนี้จะพามาทดลองคิวรีข้อมูลที่ไม่มีแถวตอบกลับ แล้วเปรียบเทียบผลลัพธ์ของการจัดการ Exception ทั้ง 3 รูปแบบกันครับ
+
+**Exception** คือเหตุการณ์ผิดปกติที่เกิดขึ้นระหว่างการประมวลผล (Runtime Error) ส่วน **Exception Handler** คือบล็อกโค้ดที่เขียนไว้เพื่อจัดการกับเหตุการณ์นั้น โดยประโยคคำสั่ง `WHEN OTHERS` จะทำหน้าที่ดักจับ Exception ทุกประเภทที่ไม่ถูกจัดการโดย Handler เฉพาะก่อนหน้า
+
+---
+
+<Figure src="/images/blog/awareness-202610-plsql-exceptions/error-paths.png" alt="เปรียบเทียบตัวอย่าง handler ที่ซ่อน error กับแบบที่แสดงข้อความแล้ว RAISE กลับผู้เรียก DBMS_OUTPUT ไม่ใช่ persistent log" />
+
+*ภาพอธิบายแนวคิด: เปรียบเทียบตัวอย่าง handler ที่ซ่อน error กับแบบที่แสดงข้อความแล้ว RAISE กลับผู้เรียก DBMS_OUTPUT ไม่ใช่ persistent log*
+
+## ขั้นที่ 1: ปล่อยให้ Exception ส่งไปถึงผู้เรียก (Default Behavior)
+
+ทดลองเขียน PL/SQL Block โดยใส่เงื่อนไข `WHERE 1 = 2` ซึ่งเป็นเท็จ ทำให้คำสั่ง `SELECT ... INTO` ไม่พบแถวข้อมูลในตาราง และไม่มีการใส่ Exception Handler:
+
+```sql
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+END;
+/
+```
+
+```text
+DECLARE
+*
+ERROR at line 1:
+ORA-01403: no data found
+ORA-06512: at line 4
+Help: https://docs.oracle.com/error-help/db/ora-01403/
+```
+
+**วิเคราะห์ผลลัพธ์:**
+* ระบบส่งข้อผิดพลาด `ORA-01403: no data found` กลับมายังผู้เรียกทันที
+* รหัส `ORA-06512` ทำหน้าที่ชี้ตำแหน่งบรรทัดของโค้ดใน Block ที่เกิดปัญหาขึ้นจริง
+
+---
+
+## ขั้นที่ 2: ใส่ Handler ที่กลืน Error ไว้ (Anti-pattern: Swallowing Exceptions)
+
+ทดลองใส่ `WHEN OTHERS THEN NULL;` เพื่อแสดงรูปแบบการซ่อนปัญหาที่ควรหลีกเลี่ยง:
+
+```sql
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+EXCEPTION
+    WHEN OTHERS THEN
+        NULL;
+END;
+/
+```
+
+```text
+PL/SQL procedure successfully completed.
+```
+
+**วิเคราะห์ผลลัพธ์:**  
+คำสั่ง `SELECT` ยังคงไม่พบข้อมูลเหมือนเดิม แต่ Client กลับแสดงข้อความว่า `PL/SQL procedure successfully completed.` เนื่องจากประโยคคำสั่ง `WHEN OTHERS` ได้ดักรับ Exception ไว้แล้วสั่ง `NULL;` (ไม่ทำอะไรเลย) ส่งผลให้โปรแกรมผู้เรียกเข้าใจผิดว่าการประมวลผลทำงานสำเร็จเรียบร้อย
+
+---
+
+## ขั้นที่ 3: บันทึกข้อมูลข้อผิดพลาด แล้วส่ง Exception ต่อ (RAISE)
+
+เปิดใช้งาน `SERVEROUTPUT` แล้วปรับแก้ Handler ให้พิมพ์ข้อความแจ้งเตือน ก่อนจะส่ง Exception เดิมกลับไปหาผู้เรียกด้วยคำสั่ง `RAISE;`:
+
+```sql
+SET SERVEROUTPUT ON
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE(SQLCODE || ': ' || SQLERRM);
+        RAISE;
+END;
+/
+```
+
+```text
+100: ORA-01403: no data found
+DECLARE
+*
+ERROR at line 1:
+ORA-01403: no data found
+ORA-06512: at line 8
+ORA-06512: at line 4
+Help: https://docs.oracle.com/error-help/db/ora-01403/
+```
+
+**วิเคราะห์ผลลัพธ์:**
+1. ข้อความจาก Handler แสดง `100: ORA-01403: no data found` ออกมาทางหน้าจอ (หมายเหตุ: `SQLCODE` ของ `NO_DATA_FOUND` ใน PL/SQL คืนค่าเป็น `100` ตามมาตรฐาน ANSI SQL)
+2. มีการส่งรหัสข้อผิดพลาด `ORA-01403` พร้อม Stack Trace (`ORA-06512`) กลับไปยังโปรแกรมผู้เรียกตามปกติ ทำให้ซอฟต์แวร์ต้นทางรับรู้ความล้มเหลวได้อย่างถูกต้อง
+
+---
+
+## สรุปแนวทางปฏิบัติที่ดีในการจัดการ Exception
+
+1. **จัดการเฉพาะเหตุการณ์ที่คาดการณ์ไว้:** หากกรณีหาข้อมูลไม่เจอ (`NO_DATA_FOUND`) เป็นเงื่อนไขทางธุรกิจปกติ ให้ใช้ Handler เฉพาะ เช่น `WHEN NO_DATA_FOUND THEN ...` แล้วกำหนดค่าตอบกลับให้ชัดเจน
+2. **หลีกเลี่ยง `WHEN OTHERS THEN NULL;`:** คำสั่งนี้ถือเป็น Anti-pattern ร้ายแรง เพราะทำให้เกิดปัญหาซ่อนหมี (Silent Failure) ที่หาจุดผิดพลาดได้ยากมากในระบบ Production
+3. **จบ `WHEN OTHERS` ด้วยการ RAISE เสมอ:** หากจำเป็นต้องใช้ `WHEN OTHERS` เป็นด่านสุดท้ายเพื่อ Log ข้อมูล ควรจบด้วยคำสั่ง `RAISE;` หรือ `RAISE_APPLICATION_ERROR()` เพื่อให้ผู้เรียกรับรู้ถึงข้อผิดพลาดนั้นเสมอ
+4. **`DBMS_OUTPUT` ไม่ใช่ระบบ Log ถาวร:** การใช้ `DBMS_OUTPUT.PUT_LINE` ช่วยแสดงผลระหว่างการทดสอบเท่านั้น แต่ไม่ได้ทำการบันทึกข้อมูลลง Table หรือ Log File ของแอปพลิเคชันจริงครับ
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)

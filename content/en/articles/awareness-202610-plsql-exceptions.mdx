@@ -1,0 +1,124 @@
+---
+title: "Is PL/SQL Reporting No Error Because We Accidentally Hid It?"
+description: "Can PL/SQL report successful completion even though something went wrong inside the block or an error remains unresolved? The answer is yes, if an exception handler catches the error and lets the block finish silently. We'll try a query that returns no rows and compare three ways of handling the exception."
+tldr: "Can PL/SQL report successful completion even though something went wrong inside the block or an error remains unresolved? The answer is yes, if an exception handler catches the error and lets the block finish silently. We'll try a query that returns no rows and compare three ways of handling the exception."
+category: "PL/SQL"
+tags: []
+date: "2026-10-30"
+draft: false
+cover: "/images/articles/awareness-202610-plsql-exceptions.webp"
+translationOf: "awareness-202610-plsql-exceptions"
+translationSourceSha256: "62da619afac78d4a35055d2c722bb24045d9204088b326cb7477ebd1034f9307"
+---
+
+# Is PL/SQL Reporting No Error Because We Accidentally Hid It?
+
+Can PL/SQL report successful completion even though something went wrong inside the block or an error remains unresolved? The answer is **yes**, if an exception handler catches the error and lets the block finish silently. We'll try a query that returns no rows and compare three ways of handling the exception.
+
+An **exception** is an abnormal event that occurs during execution (a runtime error). An **exception handler** is a block of code written to handle that event. The `WHEN OTHERS` clause catches any exception that has not been handled by a preceding, specific handler.
+
+---
+
+<Figure src="/images/blog/awareness-202610-plsql-exceptions/error-paths.png" alt="Comparison of a handler that hides an error and one that displays a message and uses RAISE to propagate the exception to the caller. DBMS_OUTPUT is not a persistent log." />
+
+*Concept illustration: Comparison of a handler that hides an error and one that displays a message and uses RAISE to propagate the exception to the caller. DBMS_OUTPUT is not a persistent log.*
+
+## Step 1: Let the Exception Reach the Caller (Default Behavior)
+
+Try writing a PL/SQL block with the condition `WHERE 1 = 2`, which is false. This means the `SELECT ... INTO` statement finds no rows in the table. Leave out the exception handler:
+
+```sql
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+END;
+/
+```
+
+```text
+DECLARE
+*
+ERROR at line 1:
+ORA-01403: no data found
+ORA-06512: at line 4
+Help: https://docs.oracle.com/error-help/db/ora-01403/
+```
+
+**Understanding the results:**
+
+* The system immediately returns `ORA-01403: no data found` to the caller.
+* `ORA-06512` identifies the line in the block where the problem occurred.
+
+---
+
+## Step 2: Add a Handler That Swallows the Error (Anti-pattern: Swallowing Exceptions)
+
+Try adding `WHEN OTHERS THEN NULL;` to demonstrate an error-hiding pattern that should be avoided:
+
+```sql
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+EXCEPTION
+    WHEN OTHERS THEN
+        NULL;
+END;
+/
+```
+
+```text
+PL/SQL procedure successfully completed.
+```
+
+**Understanding the results:**
+
+The `SELECT` statement still finds no data, but the client now displays `PL/SQL procedure successfully completed.` This happens because `WHEN OTHERS` catches the exception and executes `NULL;` (which does nothing), leading the calling program to believe that processing completed successfully.
+
+---
+
+## Step 3: Record Error Information, Then Propagate the Exception (RAISE)
+
+Enable `SERVEROUTPUT` and change the handler to print a warning message before using `RAISE;` to propagate the original exception to the caller:
+
+```sql
+SET SERVEROUTPUT ON
+DECLARE
+    l_value NUMBER;
+BEGIN
+    SELECT 1 INTO l_value FROM dual WHERE 1 = 2;
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE(SQLCODE || ': ' || SQLERRM);
+        RAISE;
+END;
+/
+```
+
+```text
+100: ORA-01403: no data found
+DECLARE
+*
+ERROR at line 1:
+ORA-01403: no data found
+ORA-06512: at line 8
+ORA-06512: at line 4
+Help: https://docs.oracle.com/error-help/db/ora-01403/
+```
+
+**Understanding the results:**
+
+1. The handler displays `100: ORA-01403: no data found` on screen. (Note: In PL/SQL, `SQLCODE` returns `100` for `NO_DATA_FOUND`, following the ANSI SQL standard.)
+2. The error code `ORA-01403`, along with the stack trace (`ORA-06512`), is returned to the calling program as usual, allowing it to recognise the failure correctly.
+
+---
+
+## Good Practices for Handling Exceptions
+
+1. **Handle expected events specifically:** If finding no data (`NO_DATA_FOUND`) is a normal business condition, use a specific handler such as `WHEN NO_DATA_FOUND THEN ...` and clearly define the value to return.
+2. **Avoid `WHEN OTHERS THEN NULL;`:** This is a serious anti-pattern because it creates silent failures that are very difficult to track down in production systems.
+3. **Always end `WHEN OTHERS` by raising an error:** If you need `WHEN OTHERS` as a final handler to log information, end it with `RAISE;` or `RAISE_APPLICATION_ERROR()` so that the caller is always notified of the error.
+4. **`DBMS_OUTPUT` is not a persistent logging system:** `DBMS_OUTPUT.PUT_LINE` helps display output during testing, but it does not save information to a table or an application log file.
+
+Read more Oracle topics in the [Oracle articles on teeDBA.com](https://teedba.com/articles).
