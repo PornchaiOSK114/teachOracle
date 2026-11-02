@@ -1,0 +1,146 @@
+---
+title: "ทำไมสอง Session จึงเห็นข้อมูลไม่เหมือนกัน?"
+description: "ดูว่าทำไมสอง session จึงเห็นข้อมูลต่างกันภายใต้ READ COMMITTED และ commit มีผลกับ query ครั้งถัดไปอย่างไร"
+tldr: "ใน READ COMMITTED แต่ละ query เห็นข้อมูลที่ commit ก่อน query นั้นเริ่ม"
+category: "SQL"
+tags: ["Oracle read consistency", "Oracle session", "READ COMMITTED", "transaction visibility", "COMMIT"]
+date: "2026-11-02"
+draft: false
+cover: "/images/articles/awareness-202610-read-consistency.webp"
+---
+
+ทำไม Session A อ่านค่าได้ 100 แต่ Session B กลับอ่านได้ 120 ทั้งที่ใช้คำสั่ง `SELECT` ชุดเดียวกัน และรันคิวรีในเวลาไล่เลี่ยกัน? Oracle อ่านข้อมูลผิดพลาดหรือเปล่า? บทความนี้จะพามาไล่ดูพฤติกรรมจริงตามลำดับเวลาของการ `UPDATE` และ `COMMIT` กันครับ
+
+**Read Committed Isolation Level:** คือระดับการแยกทรานแซกชันเริ่มต้น (Default Isolation Level) ของ Oracle Database ซึ่งกำหนดไว้ว่า แต่ละคำสั่ง `SELECT` จะมองเห็นเฉพาะข้อมูลที่ตนเองแก้ไข (Uncommitted Changes) และข้อมูลที่ทรานแซกชันอื่นทำการ `COMMIT` เรียบร้อยแล้วก่อนที่คำสั่ง `SELECT` นั้นจะเริ่มต้นขึ้นเท่านั้น (**Statement-Level Read Consistency**)
+
+---
+
+<Figure src="/images/blog/awareness-202610-read-consistency/cover-concept.png" alt="ในตัวอย่าง READ COMMITTED นั้น A อ่านค่า 100 ก่อน B commit และ query ใหม่หลัง commit อ่าน 120" />
+
+*ภาพอธิบายแนวคิด: ในตัวอย่าง READ COMMITTED นั้น A อ่านค่า 100 ก่อน B commit และ query ใหม่หลัง commit อ่าน 120*
+
+## ขั้นที่ 1: เตรียมตารางและข้อมูลเริ่มต้น
+
+รันชุดคำสั่งนี้ครั้งเดียวใน Schema ทดลองเพื่อเตรียมข้อมูล:
+
+```sql
+CREATE TABLE demo_balance (
+    account_id NUMBER PRIMARY KEY,
+    balance NUMBER
+);
+
+INSERT INTO demo_balance VALUES (1, 100);
+COMMIT;
+```
+
+ทดลองให้ **Session A** รันคิวรีอ่านข้อมูลเริ่มต้น:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         100
+
+1 row selected.
+```
+
+---
+
+## ขั้นที่ 2: ให้ Session B แก้ไขข้อมูลโดยยังไม่สั่ง COMMIT
+
+**Session B:** สั่งอัปเดตยอดเงินเป็น `120` แต่ **ยังไม่สั่ง COMMIT**
+
+```sql
+UPDATE demo_balance SET balance = 120 WHERE account_id = 1;
+```
+
+```text
+1 row updated.
+```
+
+จากนั้นให้ **Session A** รันคำสั่ง `SELECT` เดิมอีกครั้ง:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         100
+
+1 row selected.
+```
+
+แต่เมื่อ **Session B** รันคำสั่ง `SELECT` เดียวกันภายในเซสชันของตนเอง:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         120
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**
+* **Session A** ยังคงมองเห็นยอดเงินเป็น `100` เท่าเดิม เพราะ Oracle ป้องกันปัญหา **Dirty Read** (การอ่านข้อมูลที่ยังไม่ถูก Commit) โดยดึงข้อมูลภาพเดิมก่อนแก้ไขจาก Undo Segment มาแสดง
+* **Session B** มองเห็นยอดเงินเป็น `120` เพราะ Oracle อนุญาตให้เซสชันมองเห็นความเปลี่ยนแปลงที่เกิดจากทรานแซกชันของตนเองได้เสมอ
+
+---
+
+## ขั้นที่ 3: ให้ Session B สั่ง COMMIT แล้ว Session A เริ่มคิวรีใหม่
+
+สลับไปที่ **Session B** แล้วสั่งจบ Transaction:
+
+```sql
+COMMIT;
+```
+
+```text
+Commit complete.
+```
+
+จากนั้นให้ **Session A** รันคำสั่ง `SELECT` อีกครั้ง:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         120
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**
+ครั้งนี้ **Session A** อ่านได้ค่า `120` เนื่องจากเป็นคำสั่ง `SELECT` คำสั่งใหม่ที่เริ่มต้นขึ้น *หลังจาก* ที่ Session B ได้ทำการ `COMMIT` เรียบร้อยแล้ว
+
+---
+
+## ขั้นที่ 4: ความแตกต่างระหว่าง Statement-Level และ Transaction-Level Consistency
+
+1. **Statement-Level Read Consistency:** Oracle รับประกันความสอดคล้องของข้อมูลภายใน **"แต่ละคำสั่ง SELECT"** เสมอ หากมีคนแก้ไขและ Commit ข้อมูลระหว่างที่คิวรีเดิมกำลังทำงาน คิวรีนั้นก็จะยังคงเห็นภาพข้อมูล ณ วินาทีที่คิวรีนั้นเริ่มรันเท่านั้น
+2. **ความเข้าใจผิดเรื่องการรันหลาย SELECT:** ภายใต้ `READ COMMITTED` แต่ละคำสั่ง `SELECT` จะเริ่มจุดอ้างอิงภาพข้อมูล (Snapshot) ใหม่เสมอ ดังนั้น หากในหนึ่งรายงานมีการรัน `SELECT` หลายคำสั่งต่อกัน ค่าที่ได้จาก `SELECT` แรกกับ `SELECT` ถัดไปอาจไม่เท่ากันได้หากมีเซสชันอื่นมา Commit ข้อมูลคั่นกลาง
+3. **การทำรายงานที่ต้องอิงภาพข้อมูลเดียวกัน:** หากต้องการให้การรันหลาย `SELECT` อ่านข้อมูลภาพเดียวกันตลอดทั้งกระบวนการ (Transaction-Level Read Consistency) จะต้องใช้คำสั่ง `SET TRANSACTION READ ONLY;` หรือปรับ Isolation Level เป็น `SERIALIZABLE`
+
+---
+
+## สรุปแนวทางไล่จับปัญหา (Troubleshooting Tips)
+
+เมื่อพบปัญหาว่าทำไมแต่ละ Session หรือหน้าจอแอปพลิเคชันมองเห็นข้อมูลไม่ตรงกัน ให้จดลำดับเหตุการณ์ตามเวลาจริง (Chronological Order) ดังนี้:
+1. **Session ไหนเป็นผู้แก้ไข?** (และแก้ไข ณ เวลาใด)
+2. **Session ไหนเป็นผู้อ่าน?** (และคำสั่ง `SELECT` นั้นเริ่มต้นขึ้น ณ เวลาใด)
+3. **การ `COMMIT` เกิดขึ้นก่อนหรือหลังการเริ่มรันคำสั่ง `SELECT` นั้น?**
+
+การไล่ลำดับเวลาทั้ง 3 ข้อนี้จะช่วยให้ระบุได้อย่างแม่นยำว่าระบบทำงานถูกต้องตามหลักการของ Isolation Level หรือไม่ โดยไม่ต้องคาดเดาครับ
+
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)

@@ -1,0 +1,151 @@
+---
+title: "Why Do Two Sessions See Different Data?"
+description: "Why does Session A read 100 while Session B reads 120, even though they use the same SELECT statement and run their queries at nearly the same time? Is Oracle reading the data incorrectly? Let's trace what actually happens through the sequence of UPDATE and COMMIT operations."
+tldr: "Why does Session A read 100 while Session B reads 120, even though they use the same SELECT statement and run their queries at nearly the same time? Is Oracle reading the data incorrectly? Let's trace what actually happens through the sequence of UPDATE and COMMIT operations."
+category: "SQL"
+tags: []
+date: "2026-11-02"
+draft: false
+cover: "/images/articles/awareness-202610-read-consistency.webp"
+translationOf: "awareness-202610-read-consistency"
+translationSourceSha256: "a3ef068f43987bd4de253dd26ca087c04f30d500bff65636220b76a58f274d0c"
+---
+
+Why does Session A read 100 while Session B reads 120, even though they use the same `SELECT` statement and run their queries at nearly the same time? Is Oracle reading the data incorrectly? Let's trace what actually happens through the sequence of `UPDATE` and `COMMIT` operations.
+
+**Read Committed Isolation Level:** This is the default transaction isolation level in Oracle Database. Each `SELECT` statement sees only its own transaction's changes, including uncommitted changes, and data that other transactions have committed before that `SELECT` statement begins (**Statement-Level Read Consistency**).
+
+---
+
+<Figure src="/images/blog/awareness-202610-read-consistency/cover-concept.png" alt="In this READ COMMITTED example, A reads 100 before B commits, and a new query after the commit reads 120" />
+
+*Concept illustration: In this READ COMMITTED example, A reads 100 before B commits, and a new query after the commit reads 120.*
+
+## Step 1: Prepare the Table and Initial Data
+
+Run these statements once in a test schema to prepare the data:
+
+```sql
+CREATE TABLE demo_balance (
+    account_id NUMBER PRIMARY KEY,
+    balance NUMBER
+);
+
+INSERT INTO demo_balance VALUES (1, 100);
+COMMIT;
+```
+
+Have **Session A** run a query to read the initial data:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         100
+
+1 row selected.
+```
+
+---
+
+## Step 2: Have Session B Update the Data Without Committing
+
+**Session B:** Update the balance to `120`, but **do not commit yet**.
+
+```sql
+UPDATE demo_balance SET balance = 120 WHERE account_id = 1;
+```
+
+```text
+1 row updated.
+```
+
+Then have **Session A** run the same `SELECT` statement again:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         100
+
+1 row selected.
+```
+
+But when **Session B** runs the same `SELECT` statement within its own session:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         120
+
+1 row selected.
+```
+
+**Interpreting the results:**
+
+* **Session A** still sees a balance of `100` because Oracle prevents **dirty reads** (reading data that has not yet been committed) by retrieving the previous version of the data from an undo segment.
+* **Session B** sees a balance of `120` because Oracle always allows a session to see changes made by its own transaction.
+
+---
+
+## Step 3: Have Session B Commit, Then Start a New Query in Session A
+
+Switch to **Session B** and end the transaction:
+
+```sql
+COMMIT;
+```
+
+```text
+Commit complete.
+```
+
+Then have **Session A** run the `SELECT` statement again:
+
+```sql
+SELECT balance FROM demo_balance WHERE account_id = 1;
+```
+
+```text
+     BALANCE
+------------
+         120
+
+1 row selected.
+```
+
+**Interpreting the results:**
+
+This time, **Session A** reads `120` because this is a new `SELECT` statement that begins *after* Session B has committed.
+
+---
+
+## Step 4: The Difference Between Statement-Level and Transaction-Level Consistency
+
+1. **Statement-Level Read Consistency:** Oracle always guarantees data consistency within **each individual `SELECT` statement**. If someone changes and commits data while an existing query is running, that query continues to see the data snapshot from the moment it began.
+2. **A common misunderstanding about running multiple `SELECT` statements:** Under `READ COMMITTED`, each `SELECT` statement establishes a new data snapshot. So, if a report runs several `SELECT` statements in sequence, the values returned by the first and subsequent statements may differ if another session commits changes between them.
+3. **Reports that need a shared data snapshot:** If multiple `SELECT` statements need to read the same data snapshot throughout the transaction (Transaction-Level Read Consistency), use `SET TRANSACTION READ ONLY;` or change the isolation level to `SERIALIZABLE`.
+
+---
+
+## Troubleshooting Tips
+
+When sessions or application screens show different data, record the events in the order they actually occurred:
+
+1. **Which session made the change?** (And when did it make the change?)
+2. **Which session read the data?** (And when did that `SELECT` statement begin?)
+3. **Did the `COMMIT` occur before or after that `SELECT` statement began?**
+
+Tracing these three events in chronological order helps you determine precisely whether the system is behaving as its isolation level requires, without having to guess.
+
+You can read more Oracle topics in the [Oracle articles on teeDBA.com](https://teedba.com/articles).
