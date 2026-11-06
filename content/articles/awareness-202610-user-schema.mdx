@@ -1,0 +1,141 @@
+---
+title: "User กับ Schema ต่างกันอย่างไร แล้วตารางนี้เป็นของใคร?"
+description: "แยกบัญชีที่เชื่อมต่อออกจากเจ้าของ schema และดูวิธีอ้างชื่อตารางให้ตรงกับ owner ใน Oracle"
+tldr: "User เป็นบัญชีและเจ้าของ schema; schema.table ระบุ owner ชัด แต่ไม่ได้เพิ่มสิทธิ์"
+category: "DBA"
+tags: ["Oracle User กับ Schema", "Oracle schema owner", "SESSION_USER", "CURRENT_SCHEMA", "Oracle objects"]
+date: "2026-11-06"
+draft: false
+cover: "/images/articles/awareness-202610-user-schema.webp"
+---
+
+เราสามารถคิวรีอ่านข้อมูลจากตาราง `ORDERS` ได้ แปลว่าบัญชีที่เราใช้อยู่เป็นเจ้าของตารางนั้นใช่หรือไม่? บทความนี้จะพามาทดลองใช้บัญชีหนึ่งอ่านตารางของอีก Schema เพื่อแยกแยะให้เห็นความแตกต่างจริง ๆ ระหว่าง **"ผู้ใช้งาน" (User)** กับ **"เจ้าของข้อมูล" (Schema Owner)** ครับ
+
+**ความแตกต่างระหว่าง User กับ Schema:**
+* **User (User Account):** คือ ตัวตนหรือบัญชีผู้ใช้ที่ใช้ยืนยันตัวตนเข้าสู่ฐานข้อมูล เป็นตัวอ้างอิงในการถือสิทธิ์ (Privileges) ต่าง ๆ
+* **Schema:** คือ กลุ่มของวัตถุในฐานข้อมูล (Database Objects เช่น Tables, Views, Indexes) ที่อยู่ภายใต้การเป็นเจ้าของของ User นั้น ๆ โดยใน Oracle ชื่อของ Schema จะเป็นชื่อเดียวกับชื่อ User เสมอ
+
+---
+
+<Figure src="/images/blog/awareness-202610-user-schema/cover-concept.png" alt="ภาพแนวคิดใช้ชื่อ APP_USER และ SALES เพื่อให้อ่านง่าย ส่วน Lab ด้านล่างใช้ KB_MKT_LAB_20261014_R2 และ KB_MKT_OWNER_20261014_R2 การเปลี่ยน current schema ไม่ได้เพิ่มสิทธิ์" />
+
+*ภาพอธิบายแนวคิด: ภาพแนวคิดใช้ชื่อ APP_USER และ SALES เพื่อให้อ่านง่าย ส่วน Lab ด้านล่างใช้ KB_MKT_LAB_20261014_R2 และ KB_MKT_OWNER_20261014_R2 การเปลี่ยน current schema ไม่ได้เพิ่มสิทธิ์*
+
+## ขั้นที่ 1: ตรวจสอบ Session User และ Current Schema ปัจจุบัน
+
+ตรวจสอบตัวตนผู้ใช้งานและ Schema เริ่มต้นของเซสชันปัจจุบันด้วยฟังก์ชัน `SYS_CONTEXT`:
+
+```sql
+SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS session_user,
+       SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS current_schema
+FROM dual;
+```
+
+```text
+SESSION_USER             CURRENT_SCHEMA
+------------------------ ------------------------
+KB_MKT_LAB_20261014_R2   KB_MKT_LAB_20261014_R2
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**  
+เมื่อเริ่มเชื่อมต่อ ค่า `SESSION_USER` (บัญชีที่ใช้ล็อกอิน) และ `CURRENT_SCHEMA` (พื้นที่ค้นหาวัตถุเริ่มต้น) จะเป็นชื่อเดียวกัน นั่นคือ `KB_MKT_LAB_20261014_R2`
+
+---
+
+## ขั้นที่ 2: ค้นหาว่าตาราง ORDERS มีใครเป็นเจ้าของ
+
+ในการทดลองนี้ มีการเตรียมตาราง `ORDERS` ไว้ใน Schema ชื่อ `KB_MKT_OWNER_20261014_R2` และให้สิทธิ์ `SELECT` แก่บัญชีทดลองไว้แล้ว เราสามารถตรวจสอบเจ้าของตารางผ่าน `ALL_TABLES` ได้ดังนี้:
+
+```sql
+SELECT owner, table_name 
+FROM all_tables
+WHERE table_name = 'ORDERS' 
+ORDER BY owner;
+```
+
+```text
+OWNER                     TABLE_NAME
+------------------------- --------------------
+KB_MKT_OWNER_20261014_R2  ORDERS
+
+1 row selected.
+```
+
+**วิเคราะห์ผลลัพธ์:**  
+คอลัมน์ `OWNER` แสดงชื่อ `KB_MKT_OWNER_20261014_R2` ซึ่งไม่ใช่ชื่อ `SESSION_USER` ของเรา  
+*(หมายเหตุ: `ALL_TABLES` จะแสดงเฉพาะตารางที่บัญชีปัจจุบันมีสิทธิ์เข้าถึงเท่านั้น หากคิวรีแล้วไม่พบข้อมูล อาจเกิดจากตารางไม่มีอยู่จริง หรือบัญชีของเรายังไม่ได้รับสิทธิ์อ่านตารางนั้น)*
+
+---
+
+## ขั้นที่ 3: ระบุ Schema Owner นำหน้าชื่อตารางแบบเจาะจง (Explicit Schema Prefix)
+
+เมื่อต้องการอ่านข้อมูลจากตารางที่เป็นของ Schema อื่น เราสามารถระบุชื่อ Schema นำหน้าชื่อตาราง (`schema_name.table_name`) ได้โดยตรง:
+
+```sql
+SELECT order_id 
+FROM KB_MKT_OWNER_20261014_R2.ORDERS 
+WHERE ROWNUM <= 5;
+```
+
+```text
+    ORDER_ID
+------------
+         101
+
+1 row selected.
+```
+
+**ผลลัพธ์:** คำสั่งทำงานสำเร็จและคืนค่า `ORDER_ID = 101` การใส่ชื่อ Schema นำหน้าช่วยให้ Oracle ชี้ไปยังวัตถุเป้าหมายได้อย่างแม่นยำ โดยไม่ต้องพึ่งพาการค้นหาจาก Schema เริ่มต้น
+
+---
+
+## ขั้นที่ 4: เปลี่ยนจุดค้นหาชื่อวัตถุด้วย ALTER SESSION
+
+หากไม่อยากพิมพ์ชื่อ Schema นำหน้าทุกครั้ง เราสามารถสั่งเปลี่ยนจุดค้นหาชื่อวัตถุเริ่มต้นของเซสชันได้ด้วยคำสั่ง `ALTER SESSION SET CURRENT_SCHEMA`:
+
+```sql
+ALTER SESSION SET CURRENT_SCHEMA = KB_MKT_OWNER_20261014_R2;
+
+SELECT SYS_CONTEXT('USERENV', 'SESSION_USER') AS session_user,
+       SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS current_schema
+FROM dual;
+```
+
+```text
+Session altered.
+
+SESSION_USER             CURRENT_SCHEMA
+------------------------ ------------------------
+KB_MKT_LAB_20261014_R2   KB_MKT_OWNER_20261014_R2
+
+1 row selected.
+```
+
+เมื่อ `CURRENT_SCHEMA` เปลี่ยนเป็น `KB_MKT_OWNER_20261014_R2` แล้ว เราสามารถอ้างถึงตาราง `ORDERS` ได้โดยตรงโดยไม่ต้องพิมพ์ชื่อ Schema นำหน้าอีกต่อไป:
+
+```sql
+SELECT order_id FROM ORDERS;
+```
+
+```text
+    ORDER_ID
+------------
+         101
+
+1 row selected.
+```
+
+---
+
+## สรุปหลักการสำคัญเกี่ยวกับ User และ Schema
+
+1. **`ALTER SESSION SET CURRENT_SCHEMA` ไม่ได้เป็นการสลับผู้ใช้:** คำสั่งนี้เปลี่ยนเฉพาะ **"เส้นทางค้นหาชื่อวัตถุ" (Name Resolution Path)** เท่านั้น แต่ `SESSION_USER` ยังคงเป็นผู้ใช้เดิม
+2. **สิทธิ์ในการเข้าถึงข้อมูลเท่าเดิม:** การเปลี่ยน `CURRENT_SCHEMA` ไม่ได้เป็นการมอบสิทธิ์ (Privileges) ใหม่เพิ่มขึ้นแต่อย่างใด คำสั่งจะรันผ่านได้ก็ต่อเมื่อ `SESSION_USER` ได้รับสิทธิ์ในการอ่าน/แก้ไขตารางนั้นๆ มาก่อนแล้วเท่านั้น
+3. **การไล่หาสาเหตุเมื่อคิวรีไม่เจอวัตถุ (Troubleshooting Order):**
+   * ตรวจสอบว่าปัจจุบันเราล็อกอินด้วยบัญชีใด (`SESSION_USER`)
+   * ตรวจสอบว่าตารางนั้นเป็นของใคร (`OWNER`)
+   * ตรวจสอบว่าบัญชีของเราได้รับสิทธิ์ (GRANT) บนตารางนั้นเรียบร้อยแล้วหรือไม่
+
+อ่านหัวข้อ Oracle อื่นต่อได้ที่ [บทความ Oracle บน teeDBA.com](https://teedba.com/articles)
